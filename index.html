@@ -110,45 +110,18 @@
   .btn-hint.show {
     opacity: 0.65;
   }
-  .btn {
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    background: transparent;
-    border: 1px solid rgba(255,255,255,0.25);
-    color: #ffffff;
+  .btn-text-link {
+    background: none;
+    border: none;
     cursor: pointer;
-    transition: all 0.25s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-  }
-  .btn svg {
-    width: 18px;
-    height: 18px;
-    stroke: currentColor;
-    fill: none;
-    stroke-width: 1.6;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-    transition: transform 0.4s ease;
-  }
-  .btn:hover {
-    background: #ffffff;
-    color: #0a0a0a;
-    border-color: #ffffff;
-  }
-  .btn:active { transform: scale(0.92); }
-  #resetBtn:hover svg { transform: rotate(-180deg); }
-
-  .btn-text {
-    font-family: 'Geist', sans-serif;
+    color: #ffffff;
+    font-family: 'Geist', 'Helvetica Neue', Helvetica, Arial, sans-serif;
     font-weight: 500;
     font-size: 17px;
     line-height: 1;
-    letter-spacing: 0;
-    padding-bottom: 1px; /* ottico per centrare il punto interrogativo */
+    letter-spacing: -0.01em;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
   }
 
   /* PRESETS */
@@ -249,8 +222,8 @@
     text-transform: none;
   }
   .info-type {
-    font-weight: 500;
-    opacity: 0.55;
+    font-weight: 400;
+    opacity: 1;
     font-style: italic;
     text-transform: none;
   }
@@ -314,16 +287,11 @@
 
 <div class="controls">
   <div class="btn-group">
-    <button class="btn" id="resetBtn" aria-label="Reset">
-      <svg viewBox="0 0 24 24">
-        <path d="M3 12a9 9 0 1 0 3-6.7"/>
-        <polyline points="3 3 3 8 8 8"/>
-      </svg>
-    </button>
+    <button class="btn-text-link" id="resetBtn" aria-label="Reset">Restart</button>
     <span class="btn-hint" id="hintReset">new word</span>
   </div>
   <div class="btn-group">
-    <button class="btn btn-text" id="infoBtn" aria-label="Info">?</button>
+    <button class="btn-text-link" id="infoBtn" aria-label="Info">Info</button>
     <span class="btn-hint" id="hintInfo">info</span>
   </div>
 </div>
