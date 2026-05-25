@@ -718,7 +718,7 @@
     ctx.font = `700 ${fontSize}px "Geist", sans-serif`;
 
     const letterWidths = LETTERS.map(ch => ctx.measureText(ch).width);
-    const gap = fontSize * -0.015;        // stretto ma lascia aria alla fisica
+    const gap = fontSize * -0.0075;       // stretto ma lascia aria alla fisica
     const lineHeightFactor = 0.82;
     const lineHeight = fontSize * lineHeightFactor;
     const maxWidth = window.innerWidth * 0.94;
