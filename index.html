@@ -35,6 +35,7 @@
     left: 24px;
     z-index: 10;
     pointer-events: none;
+    display: none;
   }
   .ui .eyebrow {
     font-size: 11px;
@@ -157,7 +158,7 @@
     left: 50%;
     transform: translateX(-50%);
     z-index: 10;
-    display: flex;
+    display: none;
     gap: 4px;
     padding: 4px;
     background: rgba(255,255,255,0.04);
@@ -231,6 +232,11 @@
     margin: 0 0 18px 0;
   }
   .credits-col p:last-child { margin-bottom: 0; }
+  .credits-col-1 p {
+    font-size: 34px;
+    line-height: 1.1;
+    margin-bottom: 0;
+  }
   .credits-col a {
     color: #ffffff;
     text-decoration: none;
@@ -240,9 +246,8 @@
   .info-word {
     font-weight: 500;
     letter-spacing: -0.01em;
-    text-transform: lowercase;
+    text-transform: none;
   }
-  .info-word::first-letter { text-transform: uppercase; }
   .info-type {
     font-weight: 500;
     opacity: 0.55;
@@ -328,15 +333,15 @@
 <div class="presets" id="presets">
   <button class="preset-btn" data-preset="default">default</button>
   <button class="preset-btn" data-preset="heavy">heavy</button>
-  <button class="preset-btn active" data-preset="floaty">floaty</button>
-  <button class="preset-btn" data-preset="snappy">snappy</button>
+  <button class="preset-btn" data-preset="floaty">floaty</button>
+  <button class="preset-btn active" data-preset="snappy">snappy</button>
 </div>
 
 <div class="presets presets-grip" id="grip">
   <span class="grip-label">grip</span>
   <button class="preset-btn" data-grip="0.1">0.1</button>
-  <button class="preset-btn active" data-grip="0.2">0.2</button>
-  <button class="preset-btn" data-grip="0.35">0.35</button>
+  <button class="preset-btn" data-grip="0.2">0.2</button>
+  <button class="preset-btn active" data-grip="0.35">0.35</button>
 </div>
 
 <div class="credits" id="infoOverlay" aria-hidden="true">
@@ -481,8 +486,8 @@
       collapseImpulse: 2.5,
     }
   };
-  let currentPreset = "floaty";
-  let gripFactor = 0.2; // soglia di slittamento del mouseConstraint
+  let currentPreset = "snappy";
+  let gripFactor = 0.35; // soglia di slittamento del mouseConstraint
 
   function pickWord() {
     // filtra per sicurezza 7-13 lettere
@@ -909,7 +914,7 @@
 
   function openInfo() {
     const entry = DICTIONARY[WORD] || { type: "", def: "No definition available." };
-    infoWordEl.textContent = WORD;
+    infoWordEl.textContent = WORD.charAt(0).toUpperCase() + WORD.slice(1).toLowerCase();
     infoTypeEl.textContent = entry.type || "";
     infoDefEl.textContent = entry.def || "";
     infoOverlay.classList.add("visible");
