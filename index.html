@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>SANDRO GRAPHIC — Falling Letters</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100vw;
+    height: 100vh;
+    height: 100dvh;
+    overflow: hidden;
+    background: #0a0a0a;
+    font-family: 'Geist', sans-serif;
+    -webkit-user-select: none;
+    user-select: none;
+    touch-action: none;
+  }
+  #world {
+    position: fixed;
+    inset: 0;
+    cursor: grab;
+  }
+  #world:active { cursor: grabbing; }
+  canvas { display: block; background: #0a0a0a; }
+
+  .ui {
+    position: fixed;
+    top: 24px;
+    left: 24px;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .ui .eyebrow {
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: #ffffff;
+    opacity: 0.6;
+    font-weight: 500;
+  }
+  .ui .title {
+    font-family: 'Geist', sans-serif;
+    font-weight: 900;
+    font-size: 15px;
+    letter-spacing: -0.01em;
+    color: #ffffff;
+    margin-top: 4px;
+  }
+  .ui .current-word {
+    font-family: 'Geist', sans-serif;
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    color: #ffffff;
+    opacity: 0.5;
+    margin-top: 10px;
+    text-transform: uppercase;
+  }
+
+  .hint {
+    position: fixed;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: #ffffff;
+    opacity: 0.45;
+    text-align: center;
+    pointer-events: none;
+    transition: opacity 0.6s ease;
+  }
+  .hint.fade { opacity: 0; }
+
+  .controls {
+    position: fixed;
+    top: 24px;
+    right: 24px;
+    z-index: 10;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .btn-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  .btn-hint {
+    font-family: 'Geist', sans-serif;
+    font-weight: 500;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: #ffffff;
+    opacity: 0;
+    white-space: nowrap;
+    pointer-events: none;
+    transition: opacity 0.6s ease;
+  }
+  .btn-hint.show {
+    opacity: 0.65;
+  }
+  .btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #ffffff;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+  .btn svg {
+    width: 18px;
+    height: 18px;
+    stroke: currentColor;
+    fill: none;
+    stroke-width: 1.6;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform 0.4s ease;
+  }
+  .btn:hover {
+    background: #ffffff;
+    color: #0a0a0a;
+    border-color: #ffffff;
+  }
+  .btn:active { transform: scale(0.92); }
+  #resetBtn:hover svg { transform: rotate(-180deg); }
+
+  .btn-text {
+    font-family: 'Geist', sans-serif;
+    font-weight: 500;
+    font-size: 17px;
+    line-height: 1;
+    letter-spacing: 0;
+    padding-bottom: 1px; /* ottico per centrare il punto interrogativo */
+  }
+
+  /* PRESETS */
+  .presets {
+    position: fixed;
+    bottom: calc(env(safe-area-inset-bottom) + 20px);
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10;
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 999px;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    align-items: center;
+  }
+  .presets-grip {
+    bottom: calc(env(safe-area-inset-bottom) + 70px);
+  }
+  .grip-label {
+    font-family: 'Geist', sans-serif;
+    font-weight: 500;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: #ffffff;
+    opacity: 0.45;
+    padding: 0 8px 0 10px;
+  }
+  .preset-btn {
+    background: transparent;
+    border: none;
+    color: #ffffff;
+    opacity: 0.5;
+    font-family: 'Geist', sans-serif;
+    font-weight: 500;
+    font-size: 11px;
+    letter-spacing: 0.02em;
+    padding: 8px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+  }
+  .preset-btn:hover { opacity: 0.85; }
+  .preset-btn.active {
+    background: #ffffff;
+    color: #0a0a0a;
+    opacity: 1;
+  }
+
+  /* CREDITS OVERLAY */
+  .credits {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: #0a0a0a;
+    z-index: 100;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .credits.visible { display: flex; }
+
+  .credits-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 0 6vw 6vw 6vw;
+    gap: 28px;
+  }
+  .credits-col p {
+    font-family: 'Geist', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-weight: 500;
+    font-size: 17px;
+    line-height: 1.3;
+    color: #ffffff;
+    letter-spacing: -0.01em;
+    margin: 0 0 18px 0;
+  }
+  .credits-col p:last-child { margin-bottom: 0; }
+  .credits-col a {
+    color: #ffffff;
+    text-decoration: none;
+    border-bottom: 1.5px solid #ffffff;
+  }
+  .credits-col strong { font-weight: 500; }
+  .info-word {
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    text-transform: lowercase;
+  }
+  .info-word::first-letter { text-transform: uppercase; }
+  .info-type {
+    font-weight: 500;
+    opacity: 0.55;
+    font-style: italic;
+    text-transform: none;
+  }
+  .info-def {
+    font-weight: 500;
+    opacity: 0.85;
+    text-transform: none;
+  }
+
+  .credits-close {
+    position: absolute;
+    top: calc(env(safe-area-inset-top) + 20px);
+    right: calc(env(safe-area-inset-right) + 24px);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #ffffff;
+    font-family: 'Geist', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-weight: 500;
+    font-size: 17px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    z-index: 101;
+  }
+
+  /* Landscape: 2 colonne affiancate */
+  @media (orientation: landscape) {
+    .credits-body {
+      flex-direction: row;
+      align-items: flex-end;
+      gap: 6vw;
+    }
+    .credits-col { flex: 1; }
+  }
+
+  .counter {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 10;
+    font-family: 'Geist', sans-serif;
+    font-weight: 900;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    color: #1a1a1a;
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  /* grain texture rimossa: schiariva il nero */
+</style>
+</head>
+<body>
+
+<div class="ui">
+  <div class="eyebrow">Physics Playground №01</div>
+  <div class="title">TIPOGRAVITY</div>
+</div>
+
+<div class="controls">
+  <div class="btn-group">
+    <button class="btn" id="resetBtn" aria-label="Reset">
+      <svg viewBox="0 0 24 24">
+        <path d="M3 12a9 9 0 1 0 3-6.7"/>
+        <polyline points="3 3 3 8 8 8"/>
+      </svg>
+    </button>
+    <span class="btn-hint" id="hintReset">new word</span>
+  </div>
+  <div class="btn-group">
+    <button class="btn btn-text" id="infoBtn" aria-label="Info">?</button>
+    <span class="btn-hint" id="hintInfo">info</span>
+  </div>
+</div>
+
+<div id="world"></div>
+
+<div class="presets" id="presets">
+  <button class="preset-btn" data-preset="default">default</button>
+  <button class="preset-btn" data-preset="heavy">heavy</button>
+  <button class="preset-btn active" data-preset="floaty">floaty</button>
+  <button class="preset-btn" data-preset="snappy">snappy</button>
+</div>
+
+<div class="presets presets-grip" id="grip">
+  <span class="grip-label">grip</span>
+  <button class="preset-btn" data-grip="0.1">0.1</button>
+  <button class="preset-btn active" data-grip="0.2">0.2</button>
+  <button class="preset-btn" data-grip="0.35">0.35</button>
+</div>
+
+<div class="credits" id="infoOverlay" aria-hidden="true">
+  <button class="credits-close" id="infoClose">Close</button>
+  <div class="credits-body">
+    <div class="credits-col credits-col-1">
+      <p>
+        <span class="info-word" id="infoWord">—</span><br>
+        <span class="info-type" id="infoType"></span>
+      </p>
+      <p class="info-def" id="infoDef"></p>
+    </div>
+    <div class="credits-col credits-col-2">
+      <p>
+        <strong>Tipogravity</strong><br>
+        A physics playground<br>
+        for typography lovers.<br>
+        <br>
+        A project by<br>
+        <a href="https://sandrostefanelli.com" target="_blank" rel="noopener">Sandro Stefanelli</a>.<br>
+        <br>
+        Developed with<br>
+        Claude — Anthropic.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+  const { Engine, Render, Runner, Bodies, Body, Composite, Mouse, MouseConstraint, Events } = Matter;
+
+  // pool di parole: terminologia tipografica + cognomi di type designer (7-13 lettere)
+  const WORD_POOL = [
+    // typography terms
+    "LIGATURE", "KERNING", "ASCENDER", "DESCENDER", "BASELINE", "COUNTER",
+    "SERIFED", "TRACKING", "LEADING", "SPECIMEN", "CAPITALS", "LETTERING",
+    "GLYPHSET", "TYPEFACE", "MONOSPACE", "GROTESQUE", "HINTING", "ITALIC",
+    "OBLIQUE", "UNICASE", "CURSIVE", "DISPLAY", "INLINE",
+    // type designer surnames
+    "FRUTIGER", "RENNER", "TSCHICHOLD", "CARTER", "ZAPF", "GARAMOND",
+    "BODONI", "CASLON", "JENSON", "GRIFFO", "GILL", "GOUDY",
+    "MIEDINGER", "HOEFLER", "TWARDOCH", "UNGER", "LICKO", "MAJOOR",
+    "FELICIANO", "SPIEKERMANN", "BIGELOW", "SCHWARTZ", "BARNBROOK"
+  ];
+
+  // dizionario con definizioni
+  const DICTIONARY = {
+    LIGATURE: { type: "noun · typography", def: "Two or more letters combined into a single glyph, like fi or fl, to improve spacing and readability." },
+    KERNING: { type: "noun · typography", def: "The adjustment of space between individual letter pairs to achieve a visually balanced rhythm." },
+    ASCENDER: { type: "noun · typography", def: "The part of a lowercase letter that extends above the x-height, as in b, d, f, h, k, l." },
+    DESCENDER: { type: "noun · typography", def: "The part of a lowercase letter that drops below the baseline, as in g, j, p, q, y." },
+    BASELINE: { type: "noun · typography", def: "The invisible line upon which most letters sit — the anchor of every typographic composition." },
+    COUNTER: { type: "noun · typography", def: "The enclosed or partially enclosed negative space inside letters like o, p, a, e." },
+    SERIFED: { type: "adjective · typography", def: "Describing a typeface that carries small finishing strokes (serifs) at the ends of its main strokes." },
+    TRACKING: { type: "noun · typography", def: "The uniform adjustment of letter spacing across a word, line, or block of text." },
+    LEADING: { type: "noun · typography", def: "The vertical distance between baselines — named after the lead strips once used between lines of metal type." },
+    SPECIMEN: { type: "noun · typography", def: "A printed sample showing the characters, weights, and spirit of a typeface. A type foundry's calling card." },
+    CAPITALS: { type: "noun · typography", def: "Uppercase letters. Historically derived from Roman square capitals carved into stone." },
+    LETTERING: { type: "noun · design", def: "The art of drawing letters by hand — bespoke, one-off, never meant to be reused like a typeface." },
+    GLYPHSET: { type: "noun · typography", def: "The complete repertoire of characters a font contains: letters, numerals, punctuation, symbols." },
+    TYPEFACE: { type: "noun · typography", def: "A family of fonts sharing a common design — Helvetica is a typeface; Helvetica Bold 12pt is a font." },
+    MONOSPACE: { type: "noun · typography", def: "A typeface where every character occupies the same horizontal width. The canvas of code and typewriters." },
+    GROTESQUE: { type: "noun · typography", def: "An early 19th-century sans-serif style with modest contrast and quiet personality. Ancestor of the modern sans." },
+    HINTING: { type: "noun · typography", def: "Instructions embedded in a font that guide how its outlines render on pixel grids at small sizes." },
+    ITALIC: { type: "adjective · typography", def: "A slanted, cursive-inspired companion style to roman type. Born in 15th-century Venice." },
+    OBLIQUE: { type: "adjective · typography", def: "A slanted version of a roman typeface — mechanically tilted, without the calligraphic redesign of a true italic." },
+    UNICASE: { type: "noun · typography", def: "A design blending uppercase and lowercase forms into one single alphabet." },
+    CURSIVE: { type: "adjective · typography", def: "Flowing, script-like letterforms where strokes connect, echoing handwriting." },
+    DISPLAY: { type: "noun · typography", def: "Typefaces designed for large sizes and short amounts of text — headlines, posters, identities." },
+    INLINE: { type: "noun · typography", def: "A decorative letterform with an engraved white line running along its strokes." },
+
+    FRUTIGER: { type: "Adrian Frutiger · 1928–2015 · Switzerland", def: "Designer of Univers, Frutiger, and Avenir. A master of system thinking and clean, humanist proportions." },
+    RENNER: { type: "Paul Renner · 1878–1956 · Germany", def: "Designer of Futura (1927), the geometric sans-serif that embodied the spirit of the Bauhaus era." },
+    TSCHICHOLD: { type: "Jan Tschichold · 1902–1974 · Germany", def: "Author of Die Neue Typographie. Moved from radical modernism to classical book design. Designer of Sabon." },
+    CARTER: { type: "Matthew Carter · b. 1937 · UK", def: "Designer of Georgia, Verdana, Bell Centennial. Arguably the most important type designer of the digital era." },
+    ZAPF: { type: "Hermann Zapf · 1918–2015 · Germany", def: "Designer of Palatino, Optima, and Zapf Dingbats. Calligrapher of rare elegance and technical precision." },
+    GARAMOND: { type: "Claude Garamond · c.1510–1561 · France", def: "Renaissance punchcutter whose roman types set the standard for French book typography for centuries." },
+    BODONI: { type: "Giambattista Bodoni · 1740–1813 · Italy", def: "Printer and type designer from Parma. His high-contrast moderns defined the Neoclassical page." },
+    CASLON: { type: "William Caslon · 1692–1766 · England", def: "English punchcutter whose types became the workhorse of 18th-century printing on both sides of the Atlantic." },
+    JENSON: { type: "Nicolas Jenson · c.1420–1480 · France/Venice", def: "Early punchcutter in Venice whose roman type (1470) set the template for humanist book faces." },
+    GRIFFO: { type: "Francesco Griffo · 1450–1518 · Italy", def: "Cut the first italic type for Aldus Manutius in Venice. A pioneer of modern typographic form." },
+    GILL: { type: "Eric Gill · 1882–1940 · England", def: "Sculptor and type designer. Creator of Gill Sans, Perpetua, and Joanna. A complex, controversial figure." },
+    GOUDY: { type: "Frederic W. Goudy · 1865–1947 · USA", def: "Prolific American type designer of over 120 typefaces, including Goudy Old Style and Kennerley." },
+    MIEDINGER: { type: "Max Miedinger · 1910–1980 · Switzerland", def: "Designer of Neue Haas Grotesk (1957), later renamed Helvetica — the most ubiquitous typeface of the 20th century." },
+    HOEFLER: { type: "Jonathan Hoefler · b. 1970 · USA", def: "Founder of Hoefler&Co. Known for Hoefler Text, Gotham, Archer, and revivals of historical faces." },
+    TWARDOCH: { type: "Adam Twardoch · b. 1975 · Poland", def: "Type designer, font technologist, and evangelist of the OpenType and variable font formats." },
+    UNGER: { type: "Gerard Unger · 1942–2018 · Netherlands", def: "Dutch master of readable text types — Swift, Capitolium, Gulliver — and a teacher of generations." },
+    LICKO: { type: "Zuzana Licko · b. 1961 · USA", def: "Co-founder of Emigre. Her bitmap fonts in the 1980s redefined what digital typography could be." },
+    MAJOOR: { type: "Martin Majoor · b. 1960 · Netherlands", def: "Designer of Scala and Scala Sans, FF Seria, Nexus. Champion of serif–sans companion systems." },
+    FELICIANO: { type: "Mário Feliciano · b. 1969 · Portugal", def: "Portuguese type designer behind Morgan, Flama, Stella — bringing Iberian sensibility to contemporary type." },
+    SPIEKERMANN: { type: "Erik Spiekermann · b. 1947 · Germany", def: "Designer of FF Meta, ITC Officina, and co-founder of MetaDesign and FontShop. Voice of modern information design." },
+    BIGELOW: { type: "Charles Bigelow · b. 1945 · USA", def: "Co-designer (with Kris Holmes) of the Lucida superfamily, one of the most complete type systems ever made." },
+    SCHWARTZ: { type: "Christian Schwartz · b. 1977 · USA", def: "Prolific contemporary type designer — Neue Haas Grotesk revival, Publico, Graphik, Amplitude." },
+    BARNBROOK: { type: "Jonathan Barnbrook · b. 1966 · UK", def: "Graphic designer and typographer. His provocative faces (Mason, Exocet) defined 1990s alternative design." }
+  };
+
+  let WORD;
+  let LETTERS;
+
+  // ═══════════════════════════════
+  // PHYSICS PRESETS
+  // ═══════════════════════════════
+  const PRESETS = {
+    default: {
+      density: 0.0018,
+      friction: 0.5,
+      frictionAir: 0.01,
+      restitution: 0.2,
+      mouseStiffness: 0.2,
+      mouseDamping: 0,
+      timeScale: 1,
+      collapseImpulse: 1.5,
+    },
+    heavy: {
+      density: 0.006,
+      friction: 0.7,
+      frictionAir: 0.04,
+      restitution: 0.05,
+      mouseStiffness: 0.06,
+      mouseDamping: 0.1,
+      timeScale: 0.9,
+      collapseImpulse: 1.0,
+    },
+    floaty: {
+      density: 0.0008,
+      friction: 0.3,
+      frictionAir: 0.07,
+      restitution: 0.4,
+      mouseStiffness: 0.08,
+      mouseDamping: 0.4,
+      timeScale: 0.7,
+      collapseImpulse: 0.6,
+    },
+    snappy: {
+      density: 0.003,
+      friction: 0.2,
+      frictionAir: 0.005,
+      restitution: 0.5,
+      mouseStiffness: 0.5,
+      mouseDamping: 0,
+      timeScale: 1.1,
+      collapseImpulse: 2.5,
+    }
+  };
+  let currentPreset = "floaty";
+  let gripFactor = 0.2; // soglia di slittamento del mouseConstraint
+
+  function pickWord() {
+    // filtra per sicurezza 7-13 lettere
+    const valid = WORD_POOL.filter(w => w.length >= 7 && w.length <= 13);
+    WORD = valid[Math.floor(Math.random() * valid.length)];
+    LETTERS = WORD.split("");
+  }
+  // palette ispirata al poster di riferimento
+  const COLORS = [
+    "#E8A4B8", // rosa
+    "#3E8D5E", // verde
+    "#1E3F8A", // blu
+    "#D85E3C", // arancio-rosso
+    "#C93B2B", // rosso
+    "#E8B93C", // giallo
+    "#A36B4A", // marrone
+    "#2B6B9E", // blu acqua
+  ];
+
+  let engine, render, runner, mouse, mouseConstraint;
+  let letterIndex = 0;
+  let letterBodies = [];
+  let wallBodies = [];
+  let gravityDown = true;
+  let autoDropTimer = null;
+  let gravityTimer = null;
+  let ceilingActive = false;
+  let onboardingShown = false;
+
+  const world = document.getElementById("world");
+  const resetBtn = document.getElementById("resetBtn");
+  const infoBtn = document.getElementById("infoBtn");
+  const infoOverlay = document.getElementById("infoOverlay");
+  const infoClose = document.getElementById("infoClose");
+  const infoWordEl = document.getElementById("infoWord");
+  const infoTypeEl = document.getElementById("infoType");
+  const infoDefEl = document.getElementById("infoDef");
+
+  function setup() {
+    engine = Engine.create();
+    engine.world.gravity.y = 1;
+    engine.world.gravity.x = 0;
+    // più iterazioni = collisioni più precise, nessuna compenetrazione
+    engine.positionIterations = 10;
+    engine.velocityIterations = 8;
+    engine.constraintIterations = 4;
+
+    render = Render.create({
+      element: world,
+      engine: engine,
+      options: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        wireframes: false,
+        background: "#0a0a0a",
+        pixelRatio: window.devicePixelRatio || 1,
+      }
+    });
+
+    // muri invisibili (creati dinamicamente così si aggiornano al resize)
+    rebuildWalls();
+
+    // mouse/touch drag
+    mouse = Mouse.create(render.canvas);
+    mouseConstraint = MouseConstraint.create(engine, {
+      mouse: mouse,
+      constraint: {
+        stiffness: 0.2,
+        render: { visible: false }
+      }
+    });
+    Composite.add(engine.world, mouseConstraint);
+    render.mouse = mouse;
+
+    // FORCE CAP: limita la forza massima che il mouseConstraint può esercitare.
+    // Se la lettera è bloccata da un muro o un'altra lettera, la molla NON accumula
+    // forza oltre soglia — quindi niente tremore, niente schizzo via.
+    // Il drag rimane agganciato finché tu non rilasci.
+    Events.on(engine, "beforeUpdate", () => {
+      if (!mouseConstraint.body) return;
+      const body = mouseConstraint.body;
+      const constraint = mouseConstraint.constraint;
+      // pointA è il punto del cursore (in world space)
+      // pointB è il punto di aggancio sul corpo (in body local space)
+      const mousePos = constraint.pointA;
+      // calcolo il punto di aggancio in world space
+      const cos = Math.cos(body.angle);
+      const sin = Math.sin(body.angle);
+      const anchorWorld = {
+        x: body.position.x + (constraint.pointB.x * cos - constraint.pointB.y * sin),
+        y: body.position.y + (constraint.pointB.x * sin + constraint.pointB.y * cos)
+      };
+      const dx = mousePos.x - anchorWorld.x;
+      const dy = mousePos.y - anchorWorld.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      // soglia: oltre questa distanza la "presa" slitta (no più forza)
+      const maxStretch = (body.fontSize || 200) * gripFactor;
+      if (dist > maxStretch) {
+        // sposto virtualmente il pointA verso il corpo, capping la distanza.
+        // così la molla non si tende oltre il limite e non accumula forza.
+        const ratio = maxStretch / dist;
+        constraint.pointA.x = anchorWorld.x + dx * ratio;
+        constraint.pointA.y = anchorWorld.y + dy * ratio;
+      }
+    });
+
+    // custom render per lettere con font
+    Events.on(render, "afterRender", function() {
+      const ctx = render.context;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      letterBodies.forEach(b => {
+        ctx.save();
+        ctx.translate(b.position.x, b.position.y);
+        ctx.rotate(b.angle);
+        ctx.fillStyle = b.render.fillStyle;
+        ctx.font = `700 ${b.fontSize}px "Geist", sans-serif`;
+        ctx.fillText(b.letterChar, 0, b.fontSize * 0.04);
+        ctx.restore();
+      });
+    });
+
+    Runner.run(engine);
+    Render.run(render);
+  }
+
+  function rebuildWalls(withCeiling) {
+    // se non specificato, mantieni lo stato precedente (per il resize)
+    if (withCeiling === undefined) withCeiling = ceilingActive;
+    ceilingActive = withCeiling;
+
+    // rimuovo vecchi muri se esistono
+    wallBodies.forEach(w => Composite.remove(engine.world, w));
+    wallBodies = [];
+
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const t = 200;
+
+    wallBodies = [
+      // pavimento
+      Bodies.rectangle(w/2, h + t/2, w * 3, t, { isStatic: true, render: { visible: false } }),
+      // sinistra
+      Bodies.rectangle(-t/2, h/2, t, h * 3, { isStatic: true, render: { visible: false } }),
+      // destra
+      Bodies.rectangle(w + t/2, h/2, t, h * 3, { isStatic: true, render: { visible: false } }),
+    ];
+
+    if (withCeiling) {
+      // soffitto appena sopra il bordo visibile, attivato solo a caduta finita
+      wallBodies.push(
+        Bodies.rectangle(w/2, -t/2, w * 3, t, { isStatic: true, render: { visible: false } })
+      );
+    }
+
+    Composite.add(engine.world, wallBodies);
+  }
+
+  function dropLetter(x, y) {
+    // limite: numero di lettere della parola corrente
+    if (letterBodies.length >= LETTERS.length) return;
+
+    // skip spazi (sicurezza)
+    while (letterIndex < LETTERS.length && LETTERS[letterIndex] === " ") {
+      letterIndex++;
+    }
+    if (letterIndex >= LETTERS.length) return;
+
+    const char = LETTERS[letterIndex];
+    const color = COLORS[letterIndex % COLORS.length];
+
+    // dimensione lettera: 40% del lato corto dello schermo
+    const baseSize = Math.min(window.innerWidth, window.innerHeight);
+    const fontSize = Math.max(180, baseSize * 0.45);
+
+    // misura la larghezza reale del carattere per collisione corretta
+    const ctx = render.context;
+    ctx.font = `700 ${fontSize}px "Geist", sans-serif`;
+    const metrics = ctx.measureText(char);
+    const w = metrics.width * 0.78;
+    const h = fontSize * 0.72;
+
+    const body = Bodies.rectangle(x, y, w, h, {
+      restitution: 0.35,
+      friction: 0.4,
+      frictionAir: 0.008,
+      density: 0.0018,
+      angle: (Math.random() - 0.5) * 0.6,
+      render: {
+        fillStyle: color,
+        visible: false,  // nascondo il rettangolo, disegno solo il testo
+      }
+    });
+    body.letterChar = char;
+    body.fontSize = fontSize;
+
+    // spinta iniziale leggera e rotazione casuale
+    Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.15);
+    Body.setVelocity(body, { x: (Math.random() - 0.5) * 2, y: 0 });
+
+    Composite.add(engine.world, body);
+    letterBodies.push(body);
+
+    letterIndex++;
+  }
+
+  function reset() {
+    if (autoDropTimer) clearTimeout(autoDropTimer);
+    stopGravityLoop();
+    letterBodies.forEach(b => Composite.remove(engine.world, b));
+    letterBodies = [];
+    letterIndex = 0;
+    pickWord();
+    startAutoDrop();
+  }
+
+  function startAutoDrop() {
+    rebuildWalls(false);
+
+    // ferma eventuale loop gravity da giro precedente e resetta gravità a default (giù)
+    stopGravityLoop();
+    gravityDown = true;
+    engine.world.gravity.x = 0;
+    engine.world.gravity.y = 1;
+
+    const positions = layoutWord();
+
+    let i = 0;
+    const typeNext = () => {
+      if (i >= positions.length) {
+        // pausa lettura, poi crollo
+        autoDropTimer = setTimeout(() => {
+          collapseWord();
+          // chiudo il soffitto dopo qualche secondo
+          autoDropTimer = setTimeout(() => {
+            rebuildWalls(true);
+            startGravityLoop();
+            // onboarding: mostra hint solo la prima volta, dopo che la parola è caduta
+            if (!onboardingShown) {
+              onboardingShown = true;
+              showOnboardingHints();
+            }
+          }, 2500);
+        }, 1200);
+        return;
+      }
+      placeStaticLetter(positions[i]);
+      i++;
+      autoDropTimer = setTimeout(typeNext, 180);
+    };
+    typeNext();
+  }
+
+  function layoutWord() {
+    // calcolo il layout della parola con wrap a capo se non ci sta
+    const baseSize = Math.min(window.innerWidth, window.innerHeight);
+    const fontSize = Math.max(180, baseSize * 0.45);
+
+    const ctx = render.context;
+    ctx.font = `700 ${fontSize}px "Geist", sans-serif`;
+
+    const letterWidths = LETTERS.map(ch => ctx.measureText(ch).width);
+    const gap = fontSize * -0.015;        // stretto ma lascia aria alla fisica
+    const lineHeightFactor = 0.82;
+    const lineHeight = fontSize * lineHeightFactor;
+    const maxWidth = window.innerWidth * 0.94;
+
+    // costruisco le righe
+    const lines = [];
+    let currentLine = [];
+    let currentWidth = 0;
+    LETTERS.forEach((char, idx) => {
+      const w = letterWidths[idx];
+      const addedWidth = currentLine.length === 0 ? w : currentWidth + gap + w;
+      if (addedWidth > maxWidth && currentLine.length > 0) {
+        // vado a capo
+        lines.push({ letters: currentLine, width: currentWidth });
+        currentLine = [{ char, w, idx }];
+        currentWidth = w;
+      } else {
+        currentLine.push({ char, w, idx });
+        currentWidth = addedWidth;
+      }
+    });
+    if (currentLine.length > 0) lines.push({ letters: currentLine, width: currentWidth });
+
+    // calcolo Y di partenza per centrare verticalmente il blocco
+    const totalHeight = lines.length * lineHeight;
+    const startY = (window.innerHeight - totalHeight) / 2 + lineHeight / 2;
+
+    const positions = [];
+    lines.forEach((line, lineIdx) => {
+      const startX = (window.innerWidth - line.width) / 2;
+      let cursorX = startX;
+      line.letters.forEach((L, i) => {
+        const x = cursorX + L.w / 2;
+        cursorX += L.w + gap;
+        positions.push({
+          char: L.char,
+          idx: L.idx,
+          x: x,
+          y: startY + lineIdx * lineHeight,
+          fontSize: fontSize,
+          letterW: L.w
+        });
+      });
+    });
+
+    return positions;
+  }
+
+  function placeStaticLetter(p) {
+    const color = COLORS[p.idx % COLORS.length];
+    const collisionW = p.letterW * 0.82;
+    const collisionH = p.fontSize * 0.78;
+    const preset = PRESETS[currentPreset];
+
+    const body = Bodies.rectangle(p.x, p.y, collisionW, collisionH, {
+      isStatic: true,
+      restitution: preset.restitution,
+      friction: preset.friction,
+      frictionAir: preset.frictionAir,
+      density: preset.density,
+      slop: 0.02,
+      render: { fillStyle: color, visible: false }
+    });
+    body.letterChar = p.char;
+    body.fontSize = p.fontSize;
+
+    Composite.add(engine.world, body);
+    letterBodies.push(body);
+  }
+
+  function collapseWord() {
+    const impulse = PRESETS[currentPreset].collapseImpulse;
+    letterBodies.forEach(b => {
+      Body.setStatic(b, false);
+      Body.setVelocity(b, {
+        x: (Math.random() - 0.5) * impulse,
+        y: (Math.random() - 0.5) * impulse * 0.7
+      });
+      Body.setAngularVelocity(b, (Math.random() - 0.5) * 0.12);
+    });
+  }
+
+  function applyPreset(name) {
+    if (!PRESETS[name]) return;
+    currentPreset = name;
+    const p = PRESETS[name];
+
+    // mouseConstraint
+    if (mouseConstraint) {
+      mouseConstraint.constraint.stiffness = p.mouseStiffness;
+      mouseConstraint.constraint.damping = p.mouseDamping;
+    }
+    // engine timing
+    if (engine) {
+      engine.timing.timeScale = p.timeScale;
+    }
+    // applico ai corpi già esistenti (e ricalcolo la massa per via della density)
+    letterBodies.forEach(b => {
+      b.restitution = p.restitution;
+      b.friction = p.friction;
+      b.frictionAir = p.frictionAir;
+      Body.setDensity(b, p.density);
+    });
+    // UI: aggiorna pulsante attivo (solo preset, non grip)
+    document.querySelectorAll(".preset-btn[data-preset]").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.preset === name);
+    });
+  }
+
+  // listener bottoni preset
+  document.querySelectorAll(".preset-btn[data-preset]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      applyPreset(btn.dataset.preset);
+    });
+  });
+
+  // listener bottoni grip (soglia di slittamento)
+  document.querySelectorAll(".preset-btn[data-grip]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      gripFactor = parseFloat(btn.dataset.grip);
+      document.querySelectorAll(".preset-btn[data-grip]").forEach(b => {
+        b.classList.toggle("active", b === btn);
+      });
+    });
+  });
+
+  function showOnboardingHints() {
+    const hintReset = document.getElementById("hintReset");
+    const hintInfo = document.getElementById("hintInfo");
+    hintReset.classList.add("show");
+    hintInfo.classList.add("show");
+    setTimeout(() => {
+      hintReset.classList.remove("show");
+      hintInfo.classList.remove("show");
+    }, 3000);
+  }
+
+  function startGravityLoop() {
+    // alterna gravità giù / su ogni 8 secondi
+    if (gravityTimer) clearInterval(gravityTimer);
+    const directions = [
+      { x: 0, y: 1  }, // giù
+      { x: 0, y: -1 }, // su
+    ];
+    let dirIndex = 0;
+    gravityTimer = setInterval(() => {
+      dirIndex = (dirIndex + 1) % directions.length;
+      const d = directions[dirIndex];
+      engine.world.gravity.x = d.x;
+      engine.world.gravity.y = d.y;
+    }, 8000);
+  }
+
+  function stopGravityLoop() {
+    if (gravityTimer) { clearInterval(gravityTimer); gravityTimer = null; }
+  }
+
+  resetBtn.addEventListener("click", (e) => { e.stopPropagation(); reset(); });
+
+  function openInfo() {
+    const entry = DICTIONARY[WORD] || { type: "", def: "No definition available." };
+    infoWordEl.textContent = WORD;
+    infoTypeEl.textContent = entry.type || "";
+    infoDefEl.textContent = entry.def || "";
+    infoOverlay.classList.add("visible");
+    infoOverlay.setAttribute("aria-hidden", "false");
+  }
+  function closeInfo() {
+    infoOverlay.classList.remove("visible");
+    infoOverlay.setAttribute("aria-hidden", "true");
+  }
+  infoBtn.addEventListener("click", (e) => { e.stopPropagation(); openInfo(); });
+  infoClose.addEventListener("click", (e) => { e.stopPropagation(); closeInfo(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && infoOverlay.classList.contains("visible")) closeInfo();
+  });
+
+  // resize
+  window.addEventListener("resize", () => {
+    if (!render || !engine) return; // guard: non fare nulla prima dell'init
+    render.canvas.width = window.innerWidth;
+    render.canvas.height = window.innerHeight;
+    render.options.width = window.innerWidth;
+    render.options.height = window.innerHeight;
+    Render.setPixelRatio(render, window.devicePixelRatio || 1);
+    rebuildWalls();
+  });
+
+  // aspetta il caricamento del font prima di avviare
+  document.fonts.ready.then(() => {
+    pickWord();
+    setup();
+    applyPreset(currentPreset); // applica i settings del preset di default
+    startAutoDrop();
+  });
+</script>
+</body>
+</html>
