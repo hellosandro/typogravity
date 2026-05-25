@@ -90,26 +90,6 @@
     gap: 8px;
     align-items: flex-start;
   }
-  .btn-group {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-  }
-  .btn-hint {
-    font-family: 'Geist', sans-serif;
-    font-weight: 500;
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    color: #ffffff;
-    opacity: 0;
-    white-space: nowrap;
-    pointer-events: none;
-    transition: opacity 0.6s ease;
-  }
-  .btn-hint.show {
-    opacity: 0.65;
-  }
   .btn-text-link {
     background: none;
     border: none;
@@ -286,14 +266,8 @@
 </div>
 
 <div class="controls">
-  <div class="btn-group">
-    <button class="btn-text-link" id="resetBtn" aria-label="Reset">Restart</button>
-    <span class="btn-hint" id="hintReset">new word</span>
-  </div>
-  <div class="btn-group">
-    <button class="btn-text-link" id="infoBtn" aria-label="Info">Info</button>
-    <span class="btn-hint" id="hintInfo">info</span>
-  </div>
+  <button class="btn-text-link" id="resetBtn" aria-label="Reset">Restart</button>
+  <button class="btn-text-link" id="infoBtn" aria-label="Info">Info</button>
 </div>
 
 <div id="world"></div>
@@ -483,7 +457,6 @@
   let autoDropTimer = null;
   let gravityTimer = null;
   let ceilingActive = false;
-  let onboardingShown = false;
 
   const world = document.getElementById("world");
   const resetBtn = document.getElementById("resetBtn");
@@ -693,11 +666,6 @@
           autoDropTimer = setTimeout(() => {
             rebuildWalls(true);
             startGravityLoop();
-            // onboarding: mostra hint solo la prima volta, dopo che la parola è caduta
-            if (!onboardingShown) {
-              onboardingShown = true;
-              showOnboardingHints();
-            }
           }, 2500);
         }, 1200);
         return;
@@ -718,7 +686,7 @@
     ctx.font = `700 ${fontSize}px "Geist", sans-serif`;
 
     const letterWidths = LETTERS.map(ch => ctx.measureText(ch).width);
-    const gap = fontSize * -0.0075;       // stretto ma lascia aria alla fisica
+    const gap = fontSize * -0.05;         // lettere strette, quasi a toccarsi
     const lineHeightFactor = 0.82;
     const lineHeight = fontSize * lineHeightFactor;
     const maxWidth = window.innerWidth * 0.94;
@@ -846,17 +814,6 @@
       });
     });
   });
-
-  function showOnboardingHints() {
-    const hintReset = document.getElementById("hintReset");
-    const hintInfo = document.getElementById("hintInfo");
-    hintReset.classList.add("show");
-    hintInfo.classList.add("show");
-    setTimeout(() => {
-      hintReset.classList.remove("show");
-      hintInfo.classList.remove("show");
-    }, 3000);
-  }
 
   function startGravityLoop() {
     // alterna gravità giù / su ogni 8 secondi
