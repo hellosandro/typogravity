@@ -166,8 +166,8 @@
     }
     if (char === "P") {
       // occhiello (box con angoli destri tondi) + asta verticale sinistra
-      const bowlH = h * 0.55;
-      const r = bowlH / 2 * 0.9;
+      const bowlH = h * 0.62;
+      const r = bowlH / 2 * 0.9;          // raggio proporzionale all'altezza dell'occhiello
       return [
         Bodies.rectangle(-w/2 + ST/2, 0, ST, h, opts),
         Bodies.rectangle(0, -h/2 + bowlH/2, w, bowlH, Object.assign({}, opts, { chamfer: { radius: [0, r, r, 0] } })),
@@ -175,8 +175,8 @@
     }
     if (char === "J") {
       // fondo (box con angoli bassi tondi) + asta verticale destra
-      const botH = h * 0.42;
-      const r = Math.min(w, botH) / 2 * 0.9;
+      const botH = h * 0.34;
+      const r = Math.min(botH, w/2) * 0.9;   // raggio maggiore
       return [
         Bodies.rectangle(w/2 - ST/2, -botH/4, ST, h - botH/2, opts),
         Bodies.rectangle(0, h/2 - botH/2, w, botH, Object.assign({}, opts, { chamfer: { radius: [0, 0, r, r] } })),
