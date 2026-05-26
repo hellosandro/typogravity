@@ -457,10 +457,11 @@
   // (la baseline del glifo non cambia): il box si stringe attorno alla lettera ferma.
   const HITBOX_W = 0.82;
   const HITBOX_H = 0.72;
-  // offset verticale del glifo dentro la hitbox: una parte proporzionale al fontSize
-  // più un offset fisso in px, per centrare le maiuscole nel box.
+  // centratura verticale del glifo nella hitbox (frazione del fontSize)
   const GLYPH_OFFSET_Y = 0.06;
-  const GLYPH_OFFSET_PX = 10;
+  // sposta SOLO il poligono (hitbox) verso il basso di N px, senza muovere la lettera:
+  // il corpo fisico è creato più in basso e il disegno del glifo è compensato di pari valore.
+  const POLY_OFFSET_Y = 10;
 
   // angoli della hitbox: tonde per le lettere curve (O, D...),
   // smusso leggero per quelle dritte (T, L, E, H...).
@@ -646,7 +647,7 @@
         ctx.rotate(b.angle);
         ctx.fillStyle = b.render.fillStyle;
         ctx.font = `700 ${b.fontSize}px "Geist", sans-serif`;
-        ctx.fillText(b.letterChar, 0, b.fontSize * GLYPH_OFFSET_Y + GLYPH_OFFSET_PX);
+        ctx.fillText(b.letterChar, 0, b.fontSize * GLYPH_OFFSET_Y - POLY_OFFSET_Y);
         ctx.restore();
       });
 
@@ -731,7 +732,7 @@
     const w = metrics.width * HITBOX_W;
     const h = fontSize * HITBOX_H;
 
-    const body = Bodies.rectangle(x, y, w, h, {
+    const body = Bodies.rectangle(x, y + POLY_OFFSET_Y, w, h, {
       chamfer: letterChamfer(char, w, h),
       restitution: 0.35,
       friction: 0.4,
@@ -862,7 +863,7 @@
     const collisionH = p.fontSize * HITBOX_H;
     const preset = PRESETS[currentPreset];
 
-    const body = Bodies.rectangle(p.x, p.y, collisionW, collisionH, {
+    const body = Bodies.rectangle(p.x, p.y + POLY_OFFSET_Y, collisionW, collisionH, {
       isStatic: true,
       chamfer: letterChamfer(p.char, collisionW, collisionH),
       restitution: preset.restitution,
