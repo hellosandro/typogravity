@@ -362,7 +362,9 @@
   const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
   const CELL = 240;                      // lato cella in px
 
-  document.fonts.ready.then(() => {
+  // Forza il caricamento del font PRIMA di misurare/disegnare: document.fonts.ready da
+  // solo non basta per un font usato unicamente nel canvas (Chrome usa il fallback).
+  document.fonts.load('700 180px "Geist"').catch(() => {}).then(() => document.fonts.ready).then(() => {
     const grid = document.getElementById("grid");
     const dpr = window.devicePixelRatio || 1;
     LETTERS.forEach((ch, i) => {
