@@ -452,11 +452,29 @@
   // quindi tengo i muri rientrati così le lettere non vengono tagliate sul bordo.
   const EDGE_MARGIN = 12;
 
-  // proporzioni della hitbox: larghezza rispetto all'advance del glifo,
-  // altezza rispetto al fontSize. Larga per contenere gli angoli di A/M/W,
-  // bassa per aderire all'altezza delle maiuscole.
-  const HITBOX_W = 0.95;
-  const HITBOX_H = 0.70;
+  // la hitbox è costruita sull'inchiostro reale del glifo (vedi measureGlyph);
+  // questo padding aggiunge qualche px per lato così il contorno non taglia la lettera.
+  const HITBOX_PAD = 12;
+
+  // misura il bounding box reale dei pixel del glifo e l'offset di disegno per
+  // centrarlo nella hitbox. Richiede ctx con textAlign "center" e textBaseline "middle".
+  function measureGlyph(ctx, ch, fontSize) {
+    const m = ctx.measureText(ch);
+    const l = m.actualBoundingBoxLeft || 0;
+    const r = m.actualBoundingBoxRight || 0;
+    const a = m.actualBoundingBoxAscent || 0;
+    const d = m.actualBoundingBoxDescent || 0;
+    let inkW = l + r;
+    let inkH = a + d;
+    if (!(inkW > 0)) inkW = m.width * 0.8;   // fallback se le metriche ink non sono disponibili
+    if (!(inkH > 0)) inkH = fontSize * 0.7;
+    return {
+      advance: m.width,
+      inkW, inkH,
+      dx: -((r - l) / 2),   // sposta il glifo così il suo inchiostro è centrato nella hitbox
+      dy: (a - d) / 2,
+    };
+  }
 
   // legge i safe-area inset (notch, home indicator, angoli) in px reali.
   // uso un probe perché env() in getComputedStyle non è affidabile su tutti i browser.
@@ -626,7 +644,7 @@
         ctx.rotate(b.angle);
         ctx.fillStyle = b.render.fillStyle;
         ctx.font = `700 ${b.fontSize}px "Geist", sans-serif`;
-        ctx.fillText(b.letterChar, 0, b.fontSize * 0.04);
+        ctx.fillText(b.letterChar, b.drawDX || 0, b.drawDY || 0);
         ctx.restore();
       });
 
@@ -704,12 +722,14 @@
     const baseSize = Math.min(window.innerWidth, window.innerHeight);
     const fontSize = Math.max(180, baseSize * 0.45);
 
-    // misura la larghezza reale del carattere per collisione corretta
+    // misura l'inchiostro reale del carattere per una hitbox aderente
     const ctx = render.context;
     ctx.font = `700 ${fontSize}px "Geist", sans-serif`;
-    const metrics = ctx.measureText(char);
-    const w = metrics.width * HITBOX_W;
-    const h = fontSize * HITBOX_H;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const gm = measureGlyph(ctx, char, fontSize);
+    const w = gm.inkW + HITBOX_PAD;
+    const h = gm.inkH + HITBOX_PAD;
 
     const body = Bodies.rectangle(x, y, w, h, {
       restitution: 0.35,
@@ -724,6 +744,8 @@
     });
     body.letterChar = char;
     body.fontSize = fontSize;
+    body.drawDX = gm.dx;
+    body.drawDY = gm.dy;
 
     // spinta iniziale leggera e rotazione casuale
     Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.15);
@@ -784,8 +806,11 @@
 
     const ctx = render.context;
     ctx.font = `700 ${fontSize}px "Geist", sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
 
-    const letterWidths = LETTERS.map(ch => ctx.measureText(ch).width);
+    // misuro l'inchiostro reale di ogni glifo per una hitbox aderente
+    const letterMetrics = LETTERS.map(ch => measureGlyph(ctx, ch, fontSize));
     const gap = fontSize * -0.05;         // lettere strette, quasi a toccarsi
     const lineHeightFactor = 0.82;
     const lineHeight = fontSize * lineHeightFactor;
@@ -796,15 +821,16 @@
     let currentLine = [];
     let currentWidth = 0;
     LETTERS.forEach((char, idx) => {
-      const w = letterWidths[idx];
+      const m = letterMetrics[idx];
+      const w = m.advance;
       const addedWidth = currentLine.length === 0 ? w : currentWidth + gap + w;
       if (addedWidth > maxWidth && currentLine.length > 0) {
         // vado a capo
         lines.push({ letters: currentLine, width: currentWidth });
-        currentLine = [{ char, w, idx }];
+        currentLine = [{ char, w, idx, m }];
         currentWidth = w;
       } else {
-        currentLine.push({ char, w, idx });
+        currentLine.push({ char, w, idx, m });
         currentWidth = addedWidth;
       }
     });
@@ -827,7 +853,11 @@
           x: x,
           y: startY + lineIdx * lineHeight,
           fontSize: fontSize,
-          letterW: L.w
+          letterW: L.w,
+          inkW: L.m.inkW,
+          inkH: L.m.inkH,
+          dx: L.m.dx,
+          dy: L.m.dy
         });
       });
     });
@@ -837,8 +867,8 @@
 
   function placeStaticLetter(p) {
     const color = COLORS[p.idx % COLORS.length];
-    const collisionW = p.letterW * HITBOX_W;
-    const collisionH = p.fontSize * HITBOX_H;
+    const collisionW = p.inkW + HITBOX_PAD;
+    const collisionH = p.inkH + HITBOX_PAD;
     const preset = PRESETS[currentPreset];
 
     const body = Bodies.rectangle(p.x, p.y, collisionW, collisionH, {
@@ -852,6 +882,8 @@
     });
     body.letterChar = p.char;
     body.fontSize = p.fontSize;
+    body.drawDX = p.dx;
+    body.drawDY = p.dy;
 
     Composite.add(engine.world, body);
     letterBodies.push(body);
