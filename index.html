@@ -472,11 +472,12 @@
   const WIDTH_BONUS = { O: 4 };          // px extra di larghezza hitbox per lettera
   const BAR_COMPENSATION = 0.94;         // compensazione ottica: spessore barre orizzontali vs aste verticali
   const CORNER_MAP = {
-    O: [1,1,1,1], Q: [1,1,1,1], S: [1,1,1,1], C: [1,1,1,1], G: [1,1,1,1],
+    O: [1,1,1,1], S: [1,1,1,1], C: [1,1,1,1],
+    G: [1,1,0,1], Q: [1,1,0,1],           // tonde tranne basso-destra (spur/coda)
     U: [0,0,1,1],                         // tonda in basso
     D: [0,1,1,0], B: [0,1,1,0],           // tonde a destra
     P: [0,1,0,0], R: [0,1,0,0],           // solo alto-destra
-    J: [0,0,0,1],                         // gancio in basso-sx
+    J: [0,0,1,0],                         // gancio in basso-destra
   };
   function letterChamfer(char, w, h) {
     const c = CORNER_MAP[char];
@@ -492,7 +493,9 @@
     const BT = ST * BAR_COMPENSATION;     // barre orizzontali più sottili (compensazione ottica)
     const mk = (cx, cy, pw, ph) => Bodies.rectangle(cx, cy, pw, ph, opts);
     if (char === "T") {
-      return [ mk(0, -h/2 + BT/2, w, BT), mk(0, 0, ST, h) ];
+      const barW = w * 1.15;            // barra superiore più larga
+      const barH = BT * 0.8;            // e più sottile
+      return [ mk(0, -h/2 + barH/2, barW, barH), mk(0, 0, ST, h) ];
     }
     if (char === "H") {
       return [ mk(-w/2 + ST/2, 0, ST, h), mk(w/2 - ST/2, 0, ST, h), mk(0, 0, w, BT) ];
