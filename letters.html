@@ -59,11 +59,12 @@
   const WIDTH_BONUS = { O: 4 };
   const BAR_COMPENSATION = 0.94;
   const CORNER_MAP = {
-    O: [1,1,1,1], Q: [1,1,1,1], S: [1,1,1,1], C: [1,1,1,1], G: [1,1,1,1],
+    O: [1,1,1,1], S: [1,1,1,1], C: [1,1,1,1],
+    G: [1,1,0,1], Q: [1,1,0,1],
     U: [0,0,1,1],
     D: [0,1,1,0], B: [0,1,1,0],
     P: [0,1,0,0], R: [0,1,0,0],
-    J: [0,0,0,1],
+    J: [0,0,1,0],
   };
   function letterChamfer(char, w, h) {
     const c = CORNER_MAP[char];
@@ -75,7 +76,7 @@
     const ST = fontSize * 0.16;
     const BT = ST * BAR_COMPENSATION;
     const mk = (cx, cy, pw, ph) => Bodies.rectangle(cx, cy, pw, ph, opts);
-    if (char === "T") return [ mk(0, -h/2 + BT/2, w, BT), mk(0, 0, ST, h) ];
+    if (char === "T") { const barW = w*1.15, barH = BT*0.8; return [ mk(0, -h/2 + barH/2, barW, barH), mk(0, 0, ST, h) ]; }
     if (char === "H") return [ mk(-w/2 + ST/2, 0, ST, h), mk(w/2 - ST/2, 0, ST, h), mk(0, 0, w, BT) ];
     if (char === "F") return [ mk(-w/2 + ST/2, 0, ST, h), mk(0, -h/2 + BT/2, w, BT), mk(0, 0, w, BT) ];
     if (char === "E") return [ mk(-w/2 + ST/2, 0, ST, h), mk(0, -h/2 + BT/2, w, BT), mk(0, 0, w, BT), mk(0, h/2 - BT/2, w, BT) ];
