@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SVG glyphs → collision: convexity & holes</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a0a; color: #fff; font-family: 'Helvetica Neue', Arial, sans-serif; padding: 28px; line-height: 1.5; }
+  h1 { font-size: 16px; letter-spacing: 0.04em; margin-bottom: 14px; }
+  p, li { font-size: 13px; color: #cfcfcf; max-width: 760px; }
+  ul { margin: 8px 0 22px 18px; }
+  .row { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 26px; align-items: flex-start; }
+  .panel { background: #111; border: 1px solid #222; border-radius: 10px; padding: 12px; width: 280px; }
+  .panel h2 { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #9a9a9a; margin-bottom: 8px; }
+  .panel .cap { font-size: 11px; color: #8a8a8a; margin-top: 8px; }
+  svg { display: block; width: 100%; height: auto; background: #000; border-radius: 6px; }
+  /* glifo: forma piena (con buco via fill-rule) */
+  .glyphO { fill: #3E8D5E; }
+  .glyphA { fill: #E8A4B8; }
+  /* pezzi convessi di collisione */
+  .piece { stroke: #ffffff; stroke-width: 1.1; }
+  code { background: #1c1c1c; padding: 1px 5px; border-radius: 4px; font-size: 12px; color: #e8b93c; }
+  .key { color: #fff; font-weight: 600; }
+</style>
+</head>
+<body>
+  <h1>From SVG glyph to Matter.js collision — the three things to know</h1>
+  <ul>
+    <li><span class="key">1. Bodies must be convex.</span> Most letters are concave, so the collision shape is a <em>compound</em> of several convex pieces.</li>
+    <li><span class="key">2. Holes (counters) aren't subtracted — they're the gap.</span> You never cut a hole into a body; you place convex pieces <em>around</em> the empty area, and that empty area becomes the counter.</li>
+    <li><span class="key">3. Curves become straight pieces.</span> A round counter (O) needs many small convex segments — more segments = smoother, but more bodies.</li>
+  </ul>
+
+  <!-- ===================== O ===================== -->
+  <div class="row">
+    <div class="panel">
+      <h2>O — glyph (SVG path)</h2>
+      <svg viewBox="0 0 120 140">
+        <!-- una sola <path> con fill-rule="evenodd": il contorno interno diventa un buco -->
+        <path class="glyphO" fill-rule="evenodd"
+              d="M10,70 a50,62 0 1,0 100,0 a50,62 0 1,0 -100,0 Z
+                 M36,70 a24,34 0 1,0 48,0 a24,34 0 1,0 -48,0 Z" />
+      </svg>
+      <div class="cap">In SVG the hole is trivial: one <code>&lt;path&gt;</code> with <code>fill-rule="evenodd"</code> and an inner sub-loop. This is the <span class="key">visual</span>.</div>
+    </div>
+    <div class="panel">
+      <h2>O — collision (convex pieces)</h2>
+      <svg viewBox="0 0 120 140" id="oColl"></svg>
+      <div class="cap">The ring is sliced into <span class="key">14 convex quads</span>. None covers the center — so the counter exists purely as the uncovered gap. (Matter can't use the ring as one body.)</div>
+    </div>
+  </div>
+
+  <!-- ===================== A ===================== -->
+  <div class="row">
+    <div class="panel">
+      <h2>A — glyph (3 solids merged)</h2>
+      <svg viewBox="0 0 120 140" id="aGlyph"></svg>
+      <div class="cap">A's strokes are straight, so the same 3 convex pieces, filled solid in one colour, already <span class="key">are</span> the letter. The triangular counter is just the gap between them.</div>
+    </div>
+    <div class="panel">
+      <h2>A — collision (convex pieces)</h2>
+      <svg viewBox="0 0 120 140" id="aColl"></svg>
+      <div class="cap">Two leg <span class="key">parallelograms</span> + one crossbar <span class="key">rectangle</span> — all convex. The counter is, again, only the empty space no piece covers.</div>
+    </div>
+  </div>
+
+  <script>
+    const NS = "http://www.w3.org/2000/svg";
+    const PALETTE = ["#E8A4B8","#3E8D5E","#1E3F8A","#D85E3C","#C93B2B","#E8B93C","#A36B4A","#2B6B9E"];
+
+    function polygon(points, fill, opacity) {
+      const el = document.createElementNS(NS, "polygon");
+      el.setAttribute("points", points.map(p => p[0].toFixed(1) + "," + p[1].toFixed(1)).join(" "));
+      el.setAttribute("class", "piece");
+      el.setAttribute("fill", fill);
+      el.setAttribute("fill-opacity", opacity);
+      return el;
+    }
+
+    // ---- O: anello scomposto in quad convessi ----
+    function ringSegments(cx, cy, RX, RY, rx, ry, n) {
+      const segs = [];
+      for (let i = 0; i < n; i++) {
+        const a0 = (i / n) * 2 * Math.PI, a1 = ((i + 1) / n) * 2 * Math.PI;
+        segs.push([
+          [cx + RX * Math.cos(a0), cy + RY * Math.sin(a0)],
+          [cx + RX * Math.cos(a1), cy + RY * Math.sin(a1)],
+          [cx + rx * Math.cos(a1), cy + ry * Math.sin(a1)],
+          [cx + rx * Math.cos(a0), cy + ry * Math.sin(a0)],
+        ]);
+      }
+      return segs;
+    }
+    {
+      const svg = document.getElementById("oColl");
+      const segs = ringSegments(60, 70, 50, 62, 24, 34, 14);
+      segs.forEach((s, i) => svg.appendChild(polygon(s, PALETTE[i % PALETTE.length], 0.45)));
+    }
+
+    // ---- A: due gambe (parallelogrammi) + traversa (rettangolo) ----
+    function legQuad(p1, p2, t) {
+      const dx = p2[0] - p1[0], dy = p2[1] - p1[1], L = Math.hypot(dx, dy);
+      const nx = (dy / L) * (t / 2), ny = (-dx / L) * (t / 2);
+      return [[p1[0]+nx, p1[1]+ny], [p1[0]-nx, p1[1]-ny], [p2[0]-nx, p2[1]-ny], [p2[0]+nx, p2[1]+ny]];
+    }
+    function aPieces() {
+      const apex = [60, 12], bl = [18, 120], br = [102, 120], t = 18;
+      const left = legQuad(apex, bl, t);
+      const right = legQuad(apex, br, t);
+      const yBar = 92, fr = (yBar - apex[1]) / (bl[1] - apex[1]);
+      const lx = apex[0] + fr * (bl[0] - apex[0]);
+      const rx = 120 - lx;
+      const bar = [[lx, yBar - t/2], [rx, yBar - t/2], [rx, yBar + t/2], [lx, yBar + t/2]];
+      return [left, right, bar];
+    }
+    {
+      const pieces = aPieces();
+      // pannello glifo: tutti i pezzi pieni in un colore → la lettera
+      const g = document.getElementById("aGlyph");
+      pieces.forEach(p => g.appendChild(polygon(p, "#E8A4B8", 1)));
+      // pannello collisione: pezzi distinti, semitrasparenti + contorno
+      const c = document.getElementById("aColl");
+      pieces.forEach((p, i) => c.appendChild(polygon(p, PALETTE[i % PALETTE.length], 0.5)));
+    }
+  </script>
+</body>
+</html>
