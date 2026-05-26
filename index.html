@@ -83,19 +83,19 @@
 
   .controls {
     position: fixed;
-    top: 24px;
-    right: 24px;
+    top: 14px;
+    right: 10px;
     z-index: 10;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 14px;
+    gap: 2px;
   }
   .menu {
     display: none;
     flex-direction: column;
     align-items: flex-end;
-    gap: 12px;
+    gap: 0;
   }
   .menu.open { display: flex; }
   .btn-text-link {
@@ -108,7 +108,7 @@
     font-size: 17px;
     line-height: 1;
     letter-spacing: -0.01em;
-    padding: 0;
+    padding: 10px 14px;
     -webkit-tap-highlight-color: transparent;
   }
 
@@ -946,6 +946,11 @@
 
   // testo spiegazione: definizione della parola corrente, in sovraimpressione
   let tapHideTimer = null;
+  function hideTapInfo() {
+    if (tapHideTimer) { clearTimeout(tapHideTimer); tapHideTimer = null; }
+    tapInfo.classList.remove("show");
+    tapInfo.setAttribute("aria-hidden", "true");
+  }
   function showTapInfo() {
     const entry = DICTIONARY[WORD] || { type: "", def: "No definition available." };
     tapWordEl.textContent = WORD.charAt(0).toUpperCase() + WORD.slice(1).toLowerCase();
@@ -954,10 +959,7 @@
     tapInfo.classList.add("show");
     tapInfo.setAttribute("aria-hidden", "false");
     if (tapHideTimer) clearTimeout(tapHideTimer);
-    tapHideTimer = setTimeout(() => {
-      tapInfo.classList.remove("show");
-      tapInfo.setAttribute("aria-hidden", "true");
-    }, 8000);
+    tapHideTimer = setTimeout(hideTapInfo, 8000);
   }
 
   // gesti sul canvas: tap = mostra spiegazione, long-press = nuova parola.
@@ -992,7 +994,10 @@
     if (!pressInfo || longPressFired) { pressInfo = null; return; }
     const dt = Date.now() - pressInfo.t;
     const moved = Math.hypot(e.clientX - pressInfo.x, e.clientY - pressInfo.y);
-    if (dt < TAP_TIME && moved < TAP_MOVE) showTapInfo();
+    if (dt < TAP_TIME && moved < TAP_MOVE) {
+      if (tapInfo.classList.contains("show")) hideTapInfo();
+      else showTapInfo();
+    }
     pressInfo = null;
   });
   world.addEventListener("pointercancel", () => {
