@@ -470,6 +470,7 @@
   const CHAMFER_ROUND = 0.9;             // frazione di maxR per gli angoli tondi
   const ROUND_OVERRIDE = { O: 0.98 };    // roundness specifica per lettera (frazione di maxR)
   const WIDTH_BONUS = { O: 4 };          // px extra di larghezza hitbox per lettera
+  const BAR_COMPENSATION = 0.94;         // compensazione ottica: spessore barre orizzontali vs aste verticali
   const CORNER_MAP = {
     O: [1,1,1,1], Q: [1,1,1,1], S: [1,1,1,1], C: [1,1,1,1], G: [1,1,1,1],
     U: [0,0,1,1],                         // tonda in basso
@@ -488,7 +489,7 @@
   // I parti sono definiti attorno all'origine (centro del box). Spessore tratto ~0.16em.
   function letterParts(char, w, h, fontSize, opts) {
     const ST = fontSize * 0.16;           // spessore asta verticale
-    const BT = fontSize * 0.16;           // spessore barra orizzontale
+    const BT = ST * BAR_COMPENSATION;     // barre orizzontali più sottili (compensazione ottica)
     const mk = (cx, cy, pw, ph) => Bodies.rectangle(cx, cy, pw, ph, opts);
     if (char === "T") {
       return [ mk(0, -h/2 + BT/2, w, BT), mk(0, 0, ST, h) ];
@@ -497,15 +498,15 @@
       return [ mk(-w/2 + ST/2, 0, ST, h), mk(w/2 - ST/2, 0, ST, h), mk(0, 0, w, BT) ];
     }
     if (char === "F") {
-      const midW = w * 0.92;              // barra centrale simile in larghezza a quella alta
-      return [ mk(-w/2 + ST/2, 0, ST, h), mk(0, -h/2 + BT/2, w, BT), mk(-w/2 + midW/2, 0, midW, BT) ];
+      // barre orizzontali di pari larghezza
+      return [ mk(-w/2 + ST/2, 0, ST, h), mk(0, -h/2 + BT/2, w, BT), mk(0, 0, w, BT) ];
     }
     if (char === "E") {
-      const midW = w * 0.8;               // barra centrale leggermente più corta
+      // barre orizzontali di pari larghezza
       return [
         mk(-w/2 + ST/2, 0, ST, h),        // asta sinistra
         mk(0, -h/2 + BT/2, w, BT),        // barra alto
-        mk(-w/2 + midW/2, 0, midW, BT),   // barra centrale
+        mk(0, 0, w, BT),                  // barra centrale
         mk(0, h/2 - BT/2, w, BT),         // barra basso
       ];
     }
