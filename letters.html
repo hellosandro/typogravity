@@ -72,21 +72,143 @@
     const r = Math.min(w, h) / 2 * (ROUND_OVERRIDE[char] || CHAMFER_ROUND);
     return { radius: [c[0]*r, c[1]*r, c[2]*r, c[3]*r] };
   }
+  // Campiona i pixel reali del glifo "A" per ricavare l'angolo esatto delle gambe
+  // diagonali (e la traversa). Ritorna i parti in coordinate-design (origine = centro box).
+  function sampleA(fontSize, opts) {
+    const size = Math.ceil(fontSize * 1.8);
+    const Cx = Math.round(size / 2), Cy = Math.round(size / 2);
+    const glyphRelY = fontSize * GLYPH_OFFSET_Y - POLY_OFFSET_Y;
+    const off = document.createElement("canvas");
+    off.width = size; off.height = size;
+    const o = off.getContext("2d");
+    o.fillStyle = "#fff";
+    o.textAlign = "center";
+    o.textBaseline = "middle";
+    o.font = `700 ${fontSize}px "Geist", sans-serif`;
+    o.fillText("A", Cx, Cy + glyphRelY);     // glifo disegnato come nell'app (origine box = centro)
+    const data = o.getImageData(0, 0, size, size).data;
+    const A = (x, y) => (x < 0 || y < 0 || x >= size || y >= size) ? 0 : data[(y * size + x) * 4 + 3];
+
+    let top = -1, bot = -1;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) { if (A(x, y) > 40) { if (top < 0) top = y; bot = y; break; } }
+    }
+    if (top < 0) return null;
+    const Hk = bot - top;
+    const leftmost = y => { for (let x = 0; x < size; x++) if (A(x, y) > 40) return x; return -1; };
+    const rightmost = y => { for (let x = size - 1; x >= 0; x--) if (A(x, y) > 40) return x; return -1; };
+
+    // due righe di campionamento sui tratti diagonali → bordo esterno di ogni gamba
+    const yA = Math.round(top + 0.35 * Hk), yB = Math.round(top + 0.95 * Hk);
+    const Lx1 = leftmost(yA), Lx2 = leftmost(yB);
+    const Rx1 = rightmost(yA), Rx2 = rightmost(yB);
+    if (Lx1 < 0 || Rx1 < 0) return null;
+
+    // spessore: corsa orizzontale dell'inchiostro al piede sinistro
+    let run = 0; { let x = Lx2; while (A(x, yB) > 40) { run++; x++; } }
+
+    const lineX = (x1, y1, x2, y2, y) => x1 + (y - y1) * (x2 - x1) / (y2 - y1);
+    const outer = (x1, x2) => ({ a: { x: lineX(x1, yA, x2, yB, top), y: top }, b: { x: lineX(x1, yA, x2, yB, bot), y: bot } });
+    const Lo = outer(Lx1, Lx2), Ro = outer(Rx1, Rx2);
+    const angL = Math.atan2(Lo.b.y - Lo.a.y, Lo.b.x - Lo.a.x);
+    const T = Math.max(run * Math.abs(Math.sin(angL)), fontSize * 0.05);
+
+    // sposta il bordo esterno verso l'interno di T/2 → centro del tratto
+    const inward = (e, sign) => {
+      const dx = e.b.x - e.a.x, dy = e.b.y - e.a.y, L = Math.hypot(dx, dy);
+      const nx = sign * (dy / L), ny = sign * (-dx / L);
+      return { a: { x: e.a.x + nx * T / 2, y: e.a.y + ny * T / 2 }, b: { x: e.b.x + nx * T / 2, y: e.b.y + ny * T / 2 } };
+    };
+    const Lc = inward(Lo, +1);   // gamba sx: interno verso destra (+x)
+    const Rc = inward(Ro, -1);   // gamba dx: interno verso sinistra (−x)
+
+    const legPart = c => {
+      const cx = (c.a.x + c.b.x) / 2 - Cx;
+      const cy = (c.a.y + c.b.y) / 2 - Cy;
+      const len = Math.hypot(c.b.x - c.a.x, c.b.y - c.a.y);
+      const angle = Math.atan2(c.b.y - c.a.y, c.b.x - c.a.x);
+      return Bodies.rectangle(cx, cy, len, T, Object.assign({}, opts, { angle }));
+    };
+    const parts = [ legPart(Lc), legPart(Rc) ];
+
+    // traversa: cerco il tratto centrale lungo la colonna centrale
+    let runs = [], inRun = false, rs = 0;
+    for (let y = top; y <= bot; y++) {
+      const on = A(Cx, y) > 40;
+      if (on && !inRun) { inRun = true; rs = y; }
+      else if (!on && inRun) { inRun = false; runs.push([rs, y - 1]); }
+    }
+    if (inRun) runs.push([rs, bot]);
+    let bar = null;
+    for (const r of runs) { const mid = (r[0] + r[1]) / 2; if (mid > top + 0.35 * Hk && mid < top + 0.9 * Hk) bar = r; }
+    if (bar) {
+      const yBar = (bar[0] + bar[1]) / 2;
+      const xL = lineX(Lc.a.x, Lc.a.y, Lc.b.x, Lc.b.y, yBar);
+      const xR = lineX(Rc.a.x, Rc.a.y, Rc.b.x, Rc.b.y, yBar);
+      parts.push(Bodies.rectangle((xL + xR) / 2 - Cx, yBar - Cy, (xR - xL), (bar[1] - bar[0]), opts));
+    }
+    return parts;
+  }
+
+  // Campiona i pixel del glifo e lo scompone in fasce orizzontali: cattura curve e
+  // controforme (i buchi) perché ogni riga può avere più segmenti separati.
+  function slabBody(ch, fontSize, opts) {
+    const size = Math.ceil(fontSize * 1.9);
+    const Cx = Math.round(size / 2), Cy = Math.round(size / 2);
+    const glyphRelY = fontSize * GLYPH_OFFSET_Y - POLY_OFFSET_Y;
+    const off = document.createElement("canvas");
+    off.width = size; off.height = size;
+    const o = off.getContext("2d");
+    o.fillStyle = "#fff";
+    o.textAlign = "center";
+    o.textBaseline = "middle";
+    o.font = `700 ${fontSize}px "Geist", sans-serif`;
+    o.fillText(ch, Cx, Cy + glyphRelY);
+    const data = o.getImageData(0, 0, size, size).data;
+    const A = (x, y) => data[(y * size + x) * 4 + 3];
+
+    let top = -1, bot = -1;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) { if (A(x, y) > 40) { if (top < 0) top = y; bot = y; break; } }
+    }
+    if (top < 0) return null;
+
+    const slab = Math.max(4, Math.round(fontSize * 0.05));
+    const parts = [];
+    for (let y = top; y <= bot; y += slab) {
+      const row = Math.min(Math.round(y + slab / 2), bot);
+      let x = 0;
+      while (x < size) {
+        if (A(x, row) > 40) {
+          const x0 = x;
+          while (x < size && A(x, row) > 40) x++;
+          const x1 = x - 1;
+          if (x1 - x0 + 1 >= 3) {
+            parts.push(Bodies.rectangle((x0 + x1) / 2 - Cx, (y + slab / 2) - Cy, (x1 - x0 + 1), slab, opts));
+          }
+        } else x++;
+      }
+    }
+    return parts.length ? parts : null;
+  }
+
   function letterParts(char, w, h, fontSize, opts) {
     const ST = fontSize * 0.16;
     const BT = ST * BAR_COMPENSATION;
     const mk = (cx, cy, pw, ph, angle) => Bodies.rectangle(cx, cy, pw, ph, angle ? Object.assign({}, opts, { angle }) : opts);
     if (char === "A") {
-      // due gambe diagonali (rettangoli ruotati) + traversa
+      const sampled = sampleA(fontSize, opts);
+      if (sampled) return sampled;
+      // fallback geometrico (angolo box, se il campionamento fallisce)
       const legLen = Math.hypot(w/2, h);
-      const legAng = Math.atan2(h, w/2);     // pendenza gamba destra
-      const yc = h * 0.16;                    // altezza traversa (sotto il centro)
-      const t = (yc + h/2) / h;               // frazione lungo la gamba
-      return [
-        mk(-w/4, 0, legLen, ST, -legAng),     // gamba sinistra
-        mk( w/4, 0, legLen, ST,  legAng),     // gamba destra
-        mk(0, yc, t * w, BT),                  // traversa
-      ];
+      const legAng = Math.atan2(h, w/2);
+      const yc = h * 0.16;
+      const t = (yc + h/2) / h;
+      return [ mk(-w/4, 0, legLen, ST, -legAng), mk(w/4, 0, legLen, ST, legAng), mk(0, yc, t * w, BT) ];
+    }
+    if (char === "J" || char === "P") {
+      const s = slabBody(char, fontSize, opts);
+      if (s) return s;
     }
     if (char === "T") { const barW = w*1.15, barH = BT*0.8; return [ mk(0, -h/2 + barH/2, barW, barH), mk(0, 0, ST, h) ]; }
     if (char === "H") return [ mk(-w/2 + ST/2, 0, ST, h), mk(w/2 - ST/2, 0, ST, h), mk(0, 0, w, BT) ];
