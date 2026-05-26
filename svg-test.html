@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>SVG glyph + SVG collision — Matter proof</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; background: #0a0a0a; overflow: hidden; font-family: 'Helvetica Neue', Arial, sans-serif; }
+  #world { position: fixed; inset: 0; cursor: grab; }
+  #world:active { cursor: grabbing; }
+  canvas { display: block; }
+  .hud { position: fixed; top: 14px; left: 14px; z-index: 5; color: #fff; font-size: 12px; opacity: 0.7; pointer-events: none; line-height: 1.5; }
+  .hud b { font-weight: 700; }
+  .err { position: fixed; top: 50%; left: 0; right: 0; text-align: center; color: #ff6b6b; font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="hud">
+  <b>SVG glyph + SVG collision</b><br>
+  red = glyph (Path2D) · white = collision (compound body)<br>
+  drag it · long-press / double-tap to drop more
+</div>
+<div id="world"></div>
+
+<script>
+  const { Engine, Render, Runner, Bodies, Body, Composite, Mouse, MouseConstraint, Events } = Matter;
+
+  // ---- util: area-weighted centroid (shoelace) ----
+  function polyAreaCentroid(pts) {
+    let A = 0, cx = 0, cy = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i], q = pts[(i + 1) % pts.length];
+      const cr = p.x * q.y - q.x * p.y;
+      A += cr; cx += (p.x + q.x) * cr; cy += (p.y + q.y) * cr;
+    }
+    A *= 0.5;
+    if (Math.abs(A) < 1e-6) return { area: 0, cx: 0, cy: 0 };
+    return { area: Math.abs(A), cx: cx / (6 * A), cy: cy / (6 * A) };
+  }
+
+  async function main() {
+    // 1) carico i due SVG (stesso viewBox, quindi allineati)
+    const [glyphTxt, collTxt] = await Promise.all([
+      fetch("A-gliph.svg").then(r => r.text()),
+      fetch("A-collision.svg").then(r => r.text()),
+    ]);
+    const parser = new DOMParser();
+    const gDoc = parser.parseFromString(glyphTxt, "image/svg+xml");
+    const cDoc = parser.parseFromString(collTxt, "image/svg+xml");
+
+    // 2) glifo: la <path> → Path2D (riempita con nonzero, il controforma resta vuoto)
+    const glyphPath = new Path2D(gDoc.querySelector("path").getAttribute("d"));
+
+    // 3) collisione: ogni <polygon> → lista di vertici
+    const polys = Array.from(cDoc.querySelectorAll("polygon")).map(pg =>
+      pg.getAttribute("points").trim().split(/\s+/).reduce((acc, n, i) => {
+        if (i % 2 === 0) acc.push({ x: parseFloat(n), y: 0 });
+        else acc[acc.length - 1].y = parseFloat(n);
+        return acc;
+      }, [])
+    );
+
+    // 4) baricentro comune (in unità viewBox) per allineare glifo e corpo
+    let wA = 0, Gx = 0, Gy = 0;
+    polys.forEach(p => { const c = polyAreaCentroid(p); wA += c.area; Gx += c.cx * c.area; Gy += c.cy * c.area; });
+    Gx /= wA; Gy /= wA;
+
+    const S = 1.5; // scala di disegno (viewBox 224 alto → ~336px)
+
+    // ---- engine / render ----
+    const world = document.getElementById("world");
+    const engine = Engine.create();
+    engine.positionIterations = 10; engine.velocityIterations = 8;
+    const render = Render.create({
+      element: world, engine,
+      options: { width: innerWidth, height: innerHeight, wireframes: false, background: "#0a0a0a", pixelRatio: window.devicePixelRatio || 1 }
+    });
+
+    // muri
+    const t = 200, w = innerWidth, h = innerHeight;
+    Composite.add(engine.world, [
+      Bodies.rectangle(w/2, h + t/2, w*3, t, { isStatic: true, render: { visible: false } }),
+      Bodies.rectangle(-t/2, h/2, t, h*3, { isStatic: true, render: { visible: false } }),
+      Bodies.rectangle(w + t/2, h/2, t, h*3, { isStatic: true, render: { visible: false } }),
+    ]);
+
+    const letters = [];
+    function spawnA(x, y) {
+      // vertici scalati; fromVertices crea un corpo composto (ogni poligono è convesso → niente decomp)
+      const sets = polys.map(p => p.map(v => ({ x: v.x * S, y: v.y * S })));
+      const body = Bodies.fromVertices(x, y, sets, {
+        friction: 0.4, frictionAir: 0.008, restitution: 0.3, render: { visible: false }
+      }, true);
+      if (!body) return;
+      Body.setAngle(body, (Math.random() - 0.5) * 0.5);
+      Composite.add(engine.world, body);
+      letters.push(body);
+    }
+
+    // disegno: glifo (Path2D) + contorno collisione, allineati via baricentro+scala
+    Events.on(render, "afterRender", () => {
+      const ctx = render.context;
+      letters.forEach(b => {
+        ctx.save();
+        ctx.translate(b.position.x, b.position.y);
+        ctx.rotate(b.angle);
+        ctx.scale(S, S);
+        ctx.translate(-Gx, -Gy);
+        ctx.fillStyle = "#e30613";
+        ctx.fill(glyphPath);
+        ctx.restore();
+        // contorno dei pezzi convessi
+        ctx.save();
+        ctx.lineWidth = 2; ctx.strokeStyle = "rgba(255,255,255,0.85)";
+        const segs = (b.parts && b.parts.length > 1) ? b.parts.slice(1) : [b];
+        segs.forEach(part => {
+          const v = part.vertices;
+          ctx.beginPath(); ctx.moveTo(v[0].x, v[0].y);
+          for (let i = 1; i < v.length; i++) ctx.lineTo(v[i].x, v[i].y);
+          ctx.closePath(); ctx.stroke();
+        });
+        ctx.restore();
+      });
+    });
+
+    // mouse drag
+    const mouse = Mouse.create(render.canvas);
+    const mc = MouseConstraint.create(engine, { mouse, constraint: { stiffness: 0.2, render: { visible: false } } });
+    Composite.add(engine.world, mc);
+    render.mouse = mouse;
+
+    world.addEventListener("dblclick", e => spawnA(e.clientX, e.clientY));
+    window.addEventListener("resize", () => {
+      render.canvas.width = innerWidth; render.canvas.height = innerHeight;
+      render.options.width = innerWidth; render.options.height = innerHeight;
+    });
+
+    Runner.run(engine);
+    Render.run(render);
+
+    // qualche A iniziale
+    spawnA(innerWidth/2, 200);
+    setTimeout(() => spawnA(innerWidth/2 - 60, 60), 600);
+    setTimeout(() => spawnA(innerWidth/2 + 60, 40), 1200);
+  }
+
+  (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve())
+    .then(main)
+    .catch(err => {
+      document.body.insertAdjacentHTML("beforeend", '<div class="err">Error: ' + err.message + '</div>');
+      console.error(err);
+    });
+</script>
+</body>
+</html>
