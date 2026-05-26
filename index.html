@@ -458,6 +458,22 @@
   const HITBOX_W = 0.82;
   const HITBOX_H = 0.70;
 
+  // angoli della hitbox: tonde per le lettere curve (O, D...),
+  // smusso leggero per quelle dritte (T, L, E, H...).
+  const ROUND_LETTERS = "OQCGSU";        // curve su tutti i lati
+  const RIGHT_ROUND_LETTERS = "DBPRJ";   // curve a destra, piatte a sinistra
+  const CHAMFER_ROUND = 0.95;            // frazione di maxR per gli angoli tondi
+  const CHAMFER_FLAT = 0.22;             // frazione di maxR per lo smusso delle dritte
+  function letterChamfer(char, w, h) {
+    const maxR = Math.min(w, h) / 2;
+    const round = maxR * CHAMFER_ROUND;
+    const flat = maxR * CHAMFER_FLAT;
+    if (ROUND_LETTERS.includes(char)) return { radius: round };
+    // vertici del rettangolo in ordine: alto-sx, alto-dx, basso-dx, basso-sx
+    if (RIGHT_ROUND_LETTERS.includes(char)) return { radius: [flat, round, round, flat] };
+    return { radius: flat };
+  }
+
   // legge i safe-area inset (notch, home indicator, angoli) in px reali.
   // uso un probe perché env() in getComputedStyle non è affidabile su tutti i browser.
   let _safeProbe = null;
@@ -712,6 +728,7 @@
     const h = fontSize * HITBOX_H;
 
     const body = Bodies.rectangle(x, y, w, h, {
+      chamfer: letterChamfer(char, w, h),
       restitution: 0.35,
       friction: 0.4,
       frictionAir: 0.008,
@@ -843,6 +860,7 @@
 
     const body = Bodies.rectangle(p.x, p.y, collisionW, collisionH, {
       isStatic: true,
+      chamfer: letterChamfer(p.char, collisionW, collisionH),
       restitution: preset.restitution,
       friction: preset.friction,
       frictionAir: preset.frictionAir,
