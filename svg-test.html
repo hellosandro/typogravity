@@ -27,21 +27,27 @@
 <script>
   const { Engine, Render, Runner, Bodies, Body, Composite, Mouse, MouseConstraint, Events } = Matter;
 
-  // ---- util: area-weighted centroid (shoelace) ----
-  function polyAreaCentroid(pts) {
-    let A = 0, cx = 0, cy = 0;
-    for (let i = 0; i < pts.length; i++) {
-      const p = pts[i], q = pts[(i + 1) % pts.length];
-      const cr = p.x * q.y - q.x * p.y;
-      A += cr; cx += (p.x + q.x) * cr; cy += (p.y + q.y) * cr;
-    }
-    A *= 0.5;
-    if (Math.abs(A) < 1e-6) return { area: 0, cx: 0, cy: 0 };
-    return { area: Math.abs(A), cx: cx / (6 * A), cy: cy / (6 * A) };
+  // ---- util ----
+  function signedArea(p) {
+    let a = 0;
+    for (let i = 0; i < p.length; i++) { const q = p[(i + 1) % p.length]; a += p[i].x * q.y - q.x * p[i].y; }
+    return a / 2;
+  }
+  function parsePolygon(pg) {
+    const n = pg.getAttribute("points").trim().split(/[\s,]+/).map(parseFloat);
+    let pts = [];
+    for (let i = 0; i + 1 < n.length; i += 2) pts.push({ x: n[i], y: n[i + 1] });
+    // togli vertici duplicati consecutivi e il punto di chiusura ripetuto
+    const out = [];
+    for (const p of pts) { const l = out[out.length - 1]; if (!l || Math.hypot(p.x - l.x, p.y - l.y) > 0.01) out.push(p); }
+    if (out.length > 2) { const f = out[0], l = out[out.length - 1]; if (Math.hypot(f.x - l.x, f.y - l.y) < 0.01) out.pop(); }
+    // winding coerente con Matter (come Bodies.rectangle: area con segno positiva)
+    if (signedArea(out) < 0) out.reverse();
+    return out;
   }
 
   async function main() {
-    // 1) carico i due SVG (stesso viewBox, quindi allineati)
+    // 1) carico i due SVG (stesso viewBox → stesso sistema di coordinate)
     const [glyphTxt, collTxt] = await Promise.all([
       fetch("A-gliph.svg").then(r => r.text()),
       fetch("A-collision.svg").then(r => r.text()),
@@ -50,24 +56,13 @@
     const gDoc = parser.parseFromString(glyphTxt, "image/svg+xml");
     const cDoc = parser.parseFromString(collTxt, "image/svg+xml");
 
-    // 2) glifo: la <path> → Path2D (riempita con nonzero, il controforma resta vuoto)
+    // 2) glifo → Path2D (riempito nonzero: il controforma resta vuoto)
     const glyphPath = new Path2D(gDoc.querySelector("path").getAttribute("d"));
 
-    // 3) collisione: ogni <polygon> → lista di vertici
-    const polys = Array.from(cDoc.querySelectorAll("polygon")).map(pg =>
-      pg.getAttribute("points").trim().split(/\s+/).reduce((acc, n, i) => {
-        if (i % 2 === 0) acc.push({ x: parseFloat(n), y: 0 });
-        else acc[acc.length - 1].y = parseFloat(n);
-        return acc;
-      }, [])
-    );
+    // 3) collisione: ogni <polygon> → vertici puliti, winding coerente
+    const polys = Array.from(cDoc.querySelectorAll("polygon")).map(parsePolygon);
 
-    // 4) baricentro comune (in unità viewBox) per allineare glifo e corpo
-    let wA = 0, Gx = 0, Gy = 0;
-    polys.forEach(p => { const c = polyAreaCentroid(p); wA += c.area; Gx += c.cx * c.area; Gy += c.cy * c.area; });
-    Gx /= wA; Gy /= wA;
-
-    const S = 1.5; // scala di disegno (viewBox 224 alto → ~336px)
+    const S = 1.5; // scala di disegno (viewBox alto 224 → ~336px)
 
     // ---- engine / render ----
     const world = document.getElementById("world");
@@ -78,7 +73,6 @@
       options: { width: innerWidth, height: innerHeight, wireframes: false, background: "#0a0a0a", pixelRatio: window.devicePixelRatio || 1 }
     });
 
-    // muri
     const t = 200, w = innerWidth, h = innerHeight;
     Composite.add(engine.world, [
       Bodies.rectangle(w/2, h + t/2, w*3, t, { isStatic: true, render: { visible: false } }),
@@ -88,30 +82,34 @@
 
     const letters = [];
     function spawnA(x, y) {
-      // vertici scalati; fromVertices crea un corpo composto (ogni poligono è convesso → niente decomp)
-      const sets = polys.map(p => p.map(v => ({ x: v.x * S, y: v.y * S })));
-      const body = Bodies.fromVertices(x, y, sets, {
-        friction: 0.4, frictionAir: 0.008, restitution: 0.3, render: { visible: false }
-      }, true);
-      if (!body) return;
+      // un corpo (parte) per ogni poligono convesso, ai loro veri vertici (scalati)
+      const parts = polys.map(p =>
+        Body.create({ vertices: p.map(v => ({ x: v.x * S, y: v.y * S })), render: { visible: false } })
+      );
+      // assemblo il corpo composto; Body.create mette position = baricentro reale (Matter)
+      const body = Body.create({ parts, friction: 0.4, frictionAir: 0.008, restitution: 0.3, render: { visible: false } });
+      // il glifo va disegnato rispetto allo STESSO baricentro che usa Matter:
+      // l'origine viewBox (0,0), in coord-locali del corpo, sta a -position (prima di spostarlo)
+      body.glyphOriginLocal = { x: -body.position.x, y: -body.position.y };
+      Body.setPosition(body, { x, y });
       Body.setAngle(body, (Math.random() - 0.5) * 0.5);
       Composite.add(engine.world, body);
       letters.push(body);
     }
 
-    // disegno: glifo (Path2D) + contorno collisione, allineati via baricentro+scala
     Events.on(render, "afterRender", () => {
       const ctx = render.context;
       letters.forEach(b => {
+        // glifo: allineato al baricentro reale del corpo, poi scala viewBox→mondo
         ctx.save();
         ctx.translate(b.position.x, b.position.y);
         ctx.rotate(b.angle);
+        ctx.translate(b.glyphOriginLocal.x, b.glyphOriginLocal.y);
         ctx.scale(S, S);
-        ctx.translate(-Gx, -Gy);
         ctx.fillStyle = "#e30613";
         ctx.fill(glyphPath);
         ctx.restore();
-        // contorno dei pezzi convessi
+        // contorno dei pezzi convessi reali
         ctx.save();
         ctx.lineWidth = 2; ctx.strokeStyle = "rgba(255,255,255,0.85)";
         const segs = (b.parts && b.parts.length > 1) ? b.parts.slice(1) : [b];
@@ -125,7 +123,6 @@
       });
     });
 
-    // mouse drag
     const mouse = Mouse.create(render.canvas);
     const mc = MouseConstraint.create(engine, { mouse, constraint: { stiffness: 0.2, render: { visible: false } } });
     Composite.add(engine.world, mc);
@@ -140,10 +137,9 @@
     Runner.run(engine);
     Render.run(render);
 
-    // qualche A iniziale
-    spawnA(innerWidth/2, 200);
-    setTimeout(() => spawnA(innerWidth/2 - 60, 60), 600);
-    setTimeout(() => spawnA(innerWidth/2 + 60, 40), 1200);
+    spawnA(innerWidth/2, 220);
+    setTimeout(() => spawnA(innerWidth/2 - 70, 70), 700);
+    setTimeout(() => spawnA(innerWidth/2 + 70, 40), 1400);
   }
 
   (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve())
