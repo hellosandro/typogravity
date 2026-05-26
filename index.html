@@ -452,6 +452,12 @@
   // quindi tengo i muri rientrati così le lettere non vengono tagliate sul bordo.
   const EDGE_MARGIN = 12;
 
+  // proporzioni della hitbox: larghezza rispetto all'advance del glifo,
+  // altezza rispetto al fontSize. Larga per contenere gli angoli di A/M/W,
+  // bassa per aderire all'altezza delle maiuscole.
+  const HITBOX_W = 0.95;
+  const HITBOX_H = 0.70;
+
   // legge i safe-area inset (notch, home indicator, angoli) in px reali.
   // uso un probe perché env() in getComputedStyle non è affidabile su tutti i browser.
   let _safeProbe = null;
@@ -702,8 +708,8 @@
     const ctx = render.context;
     ctx.font = `700 ${fontSize}px "Geist", sans-serif`;
     const metrics = ctx.measureText(char);
-    const w = metrics.width * 0.78;
-    const h = fontSize * 0.72;
+    const w = metrics.width * HITBOX_W;
+    const h = fontSize * HITBOX_H;
 
     const body = Bodies.rectangle(x, y, w, h, {
       restitution: 0.35,
@@ -831,8 +837,8 @@
 
   function placeStaticLetter(p) {
     const color = COLORS[p.idx % COLORS.length];
-    const collisionW = p.letterW * 0.82;
-    const collisionH = p.fontSize * 0.78;
+    const collisionW = p.letterW * HITBOX_W;
+    const collisionH = p.fontSize * HITBOX_H;
     const preset = PRESETS[currentPreset];
 
     const body = Bodies.rectangle(p.x, p.y, collisionW, collisionH, {
