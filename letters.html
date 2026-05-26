@@ -75,7 +75,19 @@
   function letterParts(char, w, h, fontSize, opts) {
     const ST = fontSize * 0.16;
     const BT = ST * BAR_COMPENSATION;
-    const mk = (cx, cy, pw, ph) => Bodies.rectangle(cx, cy, pw, ph, opts);
+    const mk = (cx, cy, pw, ph, angle) => Bodies.rectangle(cx, cy, pw, ph, angle ? Object.assign({}, opts, { angle }) : opts);
+    if (char === "A") {
+      // due gambe diagonali (rettangoli ruotati) + traversa
+      const legLen = Math.hypot(w/2, h);
+      const legAng = Math.atan2(h, w/2);     // pendenza gamba destra
+      const yc = h * 0.16;                    // altezza traversa (sotto il centro)
+      const t = (yc + h/2) / h;               // frazione lungo la gamba
+      return [
+        mk(-w/4, 0, legLen, ST, -legAng),     // gamba sinistra
+        mk( w/4, 0, legLen, ST,  legAng),     // gamba destra
+        mk(0, yc, t * w, BT),                  // traversa
+      ];
+    }
     if (char === "T") { const barW = w*1.15, barH = BT*0.8; return [ mk(0, -h/2 + barH/2, barW, barH), mk(0, 0, ST, h) ]; }
     if (char === "H") return [ mk(-w/2 + ST/2, 0, ST, h), mk(w/2 - ST/2, 0, ST, h), mk(0, 0, w, BT) ];
     if (char === "F") return [ mk(-w/2 + ST/2, 0, ST, h), mk(0, -h/2 + BT/2, w, BT), mk(0, 0, w, BT) ];
