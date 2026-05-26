@@ -623,6 +623,19 @@
         ctx.fillText(b.letterChar, 0, b.fontSize * 0.04);
         ctx.restore();
       });
+
+      // contorno della hitbox: mostra la zona di impatto reale (ruota col corpo)
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "rgba(255,255,255,0.7)";
+      letterBodies.forEach(b => {
+        const v = b.vertices;
+        if (!v || v.length === 0) return;
+        ctx.beginPath();
+        ctx.moveTo(v[0].x, v[0].y);
+        for (let i = 1; i < v.length; i++) ctx.lineTo(v[i].x, v[i].y);
+        ctx.closePath();
+        ctx.stroke();
+      });
     });
 
     Runner.run(engine);
