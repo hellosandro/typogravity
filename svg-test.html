@@ -33,6 +33,17 @@
     for (let i = 0; i < p.length; i++) { const q = p[(i + 1) % p.length]; a += p[i].x * q.y - q.x * p[i].y; }
     return a / 2;
   }
+  // baricentro (area-pesato) di un poligono — serve a riportare il pezzo alla sua posizione SVG
+  function centroidOf(p) {
+    let A = 0, cx = 0, cy = 0;
+    for (let i = 0; i < p.length; i++) {
+      const a = p[i], b = p[(i + 1) % p.length], cr = a.x * b.y - b.x * a.y;
+      A += cr; cx += (a.x + b.x) * cr; cy += (a.y + b.y) * cr;
+    }
+    A *= 0.5;
+    if (Math.abs(A) < 1e-9) return { x: p[0].x, y: p[0].y };
+    return { x: cx / (6 * A), y: cy / (6 * A) };
+  }
   function parsePolygon(pg) {
     const n = pg.getAttribute("points").trim().split(/[\s,]+/).map(parseFloat);
     let pts = [];
@@ -82,10 +93,16 @@
 
     const letters = [];
     function spawnA(x, y) {
-      // un corpo (parte) per ogni poligono convesso, ai loro veri vertici (scalati)
-      const parts = polys.map(p =>
-        Body.create({ vertices: p.map(v => ({ x: v.x * S, y: v.y * S })), render: { visible: false } })
-      );
+      // un corpo (parte) per ogni poligono convesso, RIPORTATO alla sua posizione SVG.
+      // (Body.create({vertices}) ricentra i vertici sul baricentro a 0,0: con setPosition
+      //  lo rimetto alle coordinate reali del pezzo, così l'assemblaggio rispetta l'SVG.)
+      const parts = polys.map(p => {
+        const sv = p.map(v => ({ x: v.x * S, y: v.y * S }));
+        const c = centroidOf(sv);
+        const part = Body.create({ vertices: sv, render: { visible: false } });
+        Body.setPosition(part, c);
+        return part;
+      });
       // assemblo il corpo composto; Body.create mette position = baricentro reale (Matter)
       const body = Body.create({ parts, friction: 0.4, frictionAir: 0.008, restitution: 0.3, render: { visible: false } });
       // il glifo va disegnato rispetto allo STESSO baricentro che usa Matter:
