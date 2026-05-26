@@ -87,9 +87,17 @@
     right: 24px;
     z-index: 10;
     display: flex;
-    gap: 8px;
-    align-items: flex-start;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 14px;
   }
+  .menu {
+    display: none;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 12px;
+  }
+  .menu.open { display: flex; }
   .btn-text-link {
     background: none;
     border: none;
@@ -290,7 +298,12 @@
 </div>
 
 <div class="controls">
-  <button class="btn-text-link" id="infoBtn" aria-label="Credits">Credits</button>
+  <button class="btn-text-link" id="menuBtn" aria-label="Menu" aria-expanded="false">Menu</button>
+  <nav class="menu" id="menu" aria-hidden="true">
+    <button class="btn-text-link" id="menuInfo">Info</button>
+    <button class="btn-text-link" id="menuNewWord">New word</button>
+    <button class="btn-text-link" id="menuCredits">Crediti</button>
+  </nav>
 </div>
 
 <div id="world"></div>
@@ -481,7 +494,11 @@
   let ceilingActive = false;
 
   const world = document.getElementById("world");
-  const infoBtn = document.getElementById("infoBtn");
+  const menuBtn = document.getElementById("menuBtn");
+  const menu = document.getElementById("menu");
+  const menuInfo = document.getElementById("menuInfo");
+  const menuNewWord = document.getElementById("menuNewWord");
+  const menuCredits = document.getElementById("menuCredits");
   const infoOverlay = document.getElementById("infoOverlay");
   const infoClose = document.getElementById("infoClose");
   const tapInfo = document.getElementById("tapInfo");
@@ -888,7 +905,7 @@
     if (gravityTimer) { clearInterval(gravityTimer); gravityTimer = null; }
   }
 
-  // CREDITS: mostra solo i crediti del progetto (niente definizione)
+  // CREDITS overlay: solo crediti del progetto
   function openInfo() {
     infoOverlay.classList.add("visible");
     infoOverlay.setAttribute("aria-hidden", "false");
@@ -897,10 +914,34 @@
     infoOverlay.classList.remove("visible");
     infoOverlay.setAttribute("aria-hidden", "true");
   }
-  infoBtn.addEventListener("click", (e) => { e.stopPropagation(); openInfo(); });
   infoClose.addEventListener("click", (e) => { e.stopPropagation(); closeInfo(); });
+
+  // MENU: Info → definizione, New word → restart, Crediti → overlay crediti
+  function openMenu() {
+    menu.classList.add("open");
+    menu.setAttribute("aria-hidden", "false");
+    menuBtn.setAttribute("aria-expanded", "true");
+  }
+  function closeMenu() {
+    menu.classList.remove("open");
+    menu.setAttribute("aria-hidden", "true");
+    menuBtn.setAttribute("aria-expanded", "false");
+  }
+  menuBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (menu.classList.contains("open")) closeMenu(); else openMenu();
+  });
+  menuInfo.addEventListener("click", (e) => { e.stopPropagation(); closeMenu(); showTapInfo(); });
+  menuNewWord.addEventListener("click", (e) => { e.stopPropagation(); closeMenu(); reset(); });
+  menuCredits.addEventListener("click", (e) => { e.stopPropagation(); closeMenu(); openInfo(); });
+  document.addEventListener("click", (e) => {
+    if (menu.classList.contains("open") && !e.target.closest(".controls")) closeMenu();
+  });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && infoOverlay.classList.contains("visible")) closeInfo();
+    if (e.key === "Escape") {
+      if (infoOverlay.classList.contains("visible")) closeInfo();
+      closeMenu();
+    }
   });
 
   // testo spiegazione: definizione della parola corrente, in sovraimpressione
