@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>SVG glyph + SVG collision — Matter proof</title>
+<title>SVG glyph + SVG collision — Matter proof (A / X / O)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -13,27 +13,30 @@
   canvas { display: block; }
   .hud { position: fixed; top: 14px; left: 14px; z-index: 5; color: #fff; font-size: 12px; opacity: 0.7; pointer-events: none; line-height: 1.5; }
   .hud b { font-weight: 700; }
-  .err { position: fixed; top: 50%; left: 0; right: 0; text-align: center; color: #ff6b6b; font-size: 14px; }
+  .err { position: fixed; top: 50%; left: 0; right: 0; text-align: center; color: #ff6b6b; font-size: 14px; padding: 0 20px; }
 </style>
 </head>
 <body>
 <div class="hud">
-  <b>SVG glyph + SVG collision</b><br>
-  red = glyph (Path2D) · white = collision (compound body)<br>
-  drag it · long-press / double-tap to drop more
+  <b>SVG glyph + SVG collision — A / X / O</b><br>
+  colore = glifo (Path2D) · bianco = collisione (corpo composto)<br>
+  trascina · doppio tap = nuova lettera a caso
 </div>
 <div id="world"></div>
 
 <script>
-  const { Engine, Render, Runner, Bodies, Body, Composite, Mouse, MouseConstraint, Events } = Matter;
+  const { Engine, Render, Runner, Bodies, Body, Composite, Mouse, MouseConstraint, Events, Vertices } = Matter;
 
-  // ---- util ----
+  const LETTERS = ["A", "X", "O"];
+  const COLORS = { A: "#e30613", X: "#e8b93c", O: "#3aaa35" };
+  const S = 1.5; // scala viewBox→mondo
+
+  // ---- parsing ----
   function signedArea(p) {
     let a = 0;
     for (let i = 0; i < p.length; i++) { const q = p[(i + 1) % p.length]; a += p[i].x * q.y - q.x * p[i].y; }
     return a / 2;
   }
-  // baricentro (area-pesato) di un poligono — serve a riportare il pezzo alla sua posizione SVG
   function centroidOf(p) {
     let A = 0, cx = 0, cy = 0;
     for (let i = 0; i < p.length; i++) {
@@ -44,38 +47,55 @@
     if (Math.abs(A) < 1e-9) return { x: p[0].x, y: p[0].y };
     return { x: cx / (6 * A), y: cy / (6 * A) };
   }
-  function parsePolygon(pg) {
-    const n = pg.getAttribute("points").trim().split(/[\s,]+/).map(parseFloat);
-    let pts = [];
-    for (let i = 0; i + 1 < n.length; i += 2) pts.push({ x: n[i], y: n[i + 1] });
-    // togli vertici duplicati consecutivi e il punto di chiusura ripetuto
+  // path "d" → punti, solo segmenti dritti (M/L/H/V + Z, assoluti e relativi)
+  function pathToPoints(d) {
+    const toks = d.match(/[a-zA-Z]|-?\d*\.?\d+(?:[eE][-+]?\d+)?/g) || [];
+    const pts = []; let i = 0, cmd = null, cx = 0, cy = 0, sx = 0, sy = 0;
+    const num = () => parseFloat(toks[i++]);
+    while (i < toks.length) {
+      if (/[a-zA-Z]/.test(toks[i])) cmd = toks[i++];
+      switch (cmd) {
+        case "M": cx = num(); cy = num(); sx = cx; sy = cy; pts.push({ x: cx, y: cy }); cmd = "L"; break;
+        case "m": cx += num(); cy += num(); sx = cx; sy = cy; pts.push({ x: cx, y: cy }); cmd = "l"; break;
+        case "L": cx = num(); cy = num(); pts.push({ x: cx, y: cy }); break;
+        case "l": cx += num(); cy += num(); pts.push({ x: cx, y: cy }); break;
+        case "H": cx = num(); pts.push({ x: cx, y: cy }); break;
+        case "h": cx += num(); pts.push({ x: cx, y: cy }); break;
+        case "V": cy = num(); pts.push({ x: cx, y: cy }); break;
+        case "v": cy += num(); pts.push({ x: cx, y: cy }); break;
+        case "Z": case "z": cx = sx; cy = sy; cmd = null; break;
+        default: i++; break;
+      }
+    }
+    return pts;
+  }
+  function elementToPoints(el) {
+    let pts = el.tagName.toLowerCase() === "polygon"
+      ? (el.getAttribute("points").trim().split(/[\s,]+/).map(parseFloat)).reduce((a, n, i) => {
+          if (i % 2 === 0) a.push({ x: n, y: 0 }); else a[a.length - 1].y = n; return a;
+        }, [])
+      : pathToPoints(el.getAttribute("d"));
     const out = [];
     for (const p of pts) { const l = out[out.length - 1]; if (!l || Math.hypot(p.x - l.x, p.y - l.y) > 0.01) out.push(p); }
     if (out.length > 2) { const f = out[0], l = out[out.length - 1]; if (Math.hypot(f.x - l.x, f.y - l.y) < 0.01) out.pop(); }
-    // winding coerente con Matter (come Bodies.rectangle: area con segno positiva)
-    if (signedArea(out) < 0) out.reverse();
     return out;
   }
 
   async function main() {
-    // 1) carico i due SVG (stesso viewBox → stesso sistema di coordinate)
-    const [glyphTxt, collTxt] = await Promise.all([
-      fetch("A-gliph.svg").then(r => r.text()),
-      fetch("A-collision.svg").then(r => r.text()),
-    ]);
-    const parser = new DOMParser();
-    const gDoc = parser.parseFromString(glyphTxt, "image/svg+xml");
-    const cDoc = parser.parseFromString(collTxt, "image/svg+xml");
+    const data = {};
+    await Promise.all(LETTERS.map(async ch => {
+      const [g, c] = await Promise.all([
+        fetch(ch + "-gliph.svg").then(r => r.text()),
+        fetch(ch + "-collision.svg").then(r => r.text()),
+      ]);
+      const gDoc = new DOMParser().parseFromString(g, "image/svg+xml");
+      const cDoc = new DOMParser().parseFromString(c, "image/svg+xml");
+      const glyphPath = new Path2D(gDoc.querySelector("path").getAttribute("d"));
+      const polys = Array.from(cDoc.querySelectorAll("polygon, path"))
+        .map(elementToPoints).filter(p => p.length >= 3);
+      data[ch] = { glyphPath, polys, color: COLORS[ch] };
+    }));
 
-    // 2) glifo → Path2D (riempito nonzero: il controforma resta vuoto)
-    const glyphPath = new Path2D(gDoc.querySelector("path").getAttribute("d"));
-
-    // 3) collisione: ogni <polygon> → vertici puliti, winding coerente
-    const polys = Array.from(cDoc.querySelectorAll("polygon")).map(parsePolygon);
-
-    const S = 1.5; // scala di disegno (viewBox alto 224 → ~336px)
-
-    // ---- engine / render ----
     const world = document.getElementById("world");
     const engine = Engine.create();
     engine.positionIterations = 10; engine.velocityIterations = 8;
@@ -92,22 +112,18 @@
     ]);
 
     const letters = [];
-    function spawnA(x, y) {
-      // un corpo (parte) per ogni poligono convesso, RIPORTATO alla sua posizione SVG.
-      // (Body.create({vertices}) ricentra i vertici sul baricentro a 0,0: con setPosition
-      //  lo rimetto alle coordinate reali del pezzo, così l'assemblaggio rispetta l'SVG.)
-      const parts = polys.map(p => {
-        const sv = p.map(v => ({ x: v.x * S, y: v.y * S }));
+    function spawn(ch, x, y) {
+      const d = data[ch];
+      const parts = d.polys.map(p => {
+        const sv = Vertices.hull(p.map(v => ({ x: v.x * S, y: v.y * S })));  // hull = convesso garantito + winding ok
         const c = centroidOf(sv);
         const part = Body.create({ vertices: sv, render: { visible: false } });
-        Body.setPosition(part, c);
+        Body.setPosition(part, c);                                          // riporta il pezzo alla sua X/Y reale
         return part;
       });
-      // assemblo il corpo composto; Body.create mette position = baricentro reale (Matter)
       const body = Body.create({ parts, friction: 0.4, frictionAir: 0.008, restitution: 0.3, render: { visible: false } });
-      // il glifo va disegnato rispetto allo STESSO baricentro che usa Matter:
-      // l'origine viewBox (0,0), in coord-locali del corpo, sta a -position (prima di spostarlo)
-      body.glyphOriginLocal = { x: -body.position.x, y: -body.position.y };
+      body.glyphOriginLocal = { x: -body.position.x, y: -body.position.y };  // origine viewBox nel frame locale
+      body.glyphPath = d.glyphPath; body.color = d.color;
       Body.setPosition(body, { x, y });
       Body.setAngle(body, (Math.random() - 0.5) * 0.5);
       Composite.add(engine.world, body);
@@ -117,16 +133,14 @@
     Events.on(render, "afterRender", () => {
       const ctx = render.context;
       letters.forEach(b => {
-        // glifo: allineato al baricentro reale del corpo, poi scala viewBox→mondo
         ctx.save();
         ctx.translate(b.position.x, b.position.y);
         ctx.rotate(b.angle);
         ctx.translate(b.glyphOriginLocal.x, b.glyphOriginLocal.y);
         ctx.scale(S, S);
-        ctx.fillStyle = "#e30613";
-        ctx.fill(glyphPath);
+        ctx.fillStyle = b.color;
+        ctx.fill(b.glyphPath);
         ctx.restore();
-        // contorno dei pezzi convessi reali
         ctx.save();
         ctx.lineWidth = 2; ctx.strokeStyle = "rgba(255,255,255,0.85)";
         const segs = (b.parts && b.parts.length > 1) ? b.parts.slice(1) : [b];
@@ -145,7 +159,7 @@
     Composite.add(engine.world, mc);
     render.mouse = mouse;
 
-    world.addEventListener("dblclick", e => spawnA(e.clientX, e.clientY));
+    world.addEventListener("dblclick", e => spawn(LETTERS[Math.floor(Math.random() * LETTERS.length)], e.clientX, e.clientY));
     window.addEventListener("resize", () => {
       render.canvas.width = innerWidth; render.canvas.height = innerHeight;
       render.options.width = innerWidth; render.options.height = innerHeight;
@@ -154,9 +168,9 @@
     Runner.run(engine);
     Render.run(render);
 
-    spawnA(innerWidth/2, 220);
-    setTimeout(() => spawnA(innerWidth/2 - 70, 70), 700);
-    setTimeout(() => spawnA(innerWidth/2 + 70, 40), 1400);
+    spawn("A", w * 0.30, 130);
+    setTimeout(() => spawn("X", w * 0.50, 60), 500);
+    setTimeout(() => spawn("O", w * 0.70, 110), 1000);
   }
 
   (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve())
