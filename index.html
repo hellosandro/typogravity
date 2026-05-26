@@ -934,6 +934,23 @@
     setTimeout(showHint, 1400);
   }
 
+  // re-mostra l'hint dopo lunga inattività (nessun tap/drag e nessun overlay aperto)
+  const IDLE_MS = 30000;
+  let idleTimer = null;
+  function resetIdle() {
+    if (idleTimer) clearTimeout(idleTimer);
+    idleTimer = setTimeout(onIdle, IDLE_MS);
+  }
+  function onIdle() {
+    const busy = tapHint.classList.contains("show")
+              || tapInfo.classList.contains("show")
+              || infoOverlay.classList.contains("visible");
+    if (!busy) showHint();
+    resetIdle();
+  }
+  document.addEventListener("pointerdown", resetIdle);
+  document.addEventListener("pointerup", resetIdle);
+
   // testo spiegazione: definizione della parola corrente, in sovraimpressione
   let tapHideTimer = null;
   function hideTapInfo() {
@@ -1014,6 +1031,7 @@
     applyPreset(currentPreset); // applica i settings del preset di default
     startAutoDrop();
     maybeShowFirstVisitHint();
+    resetIdle();
   });
 </script>
 </body>
