@@ -185,11 +185,12 @@
     if (ch === "J") {
       const yTop = Math.round(iT + 0.12 * Hk);
       const sx0 = leftmost(yTop), sx1 = rightmost(yTop);     // in alto: solo l'asta
-      const botH = Math.round(0.28 * Hk);
+      const botH = Math.round(0.40 * Hk);                    // fondo più alto
+      const boxTop = iB - botH;
       const r = Math.min(botH, (iR - iL) / 2) * 0.9;
       return [
-        rect(sx0, sx1, iT, iB - Math.round(botH * 0.4)),     // asta (scende dentro al fondo)
-        rect(iL, iR, iB - botH, iB, [0, 0, r, r]),            // fondo, angoli bassi tondi
+        rect(sx0, sx1, iT, boxTop),                          // asta fino al bordo del fondo (niente overlap)
+        rect(iL, iR, boxTop, iB, [0, 0, r, r]),              // fondo, angoli bassi tondi
       ];
     }
     if (ch === "P") {
