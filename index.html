@@ -456,7 +456,10 @@
   // la hitbox resta centrata sul corpo, quindi ridurre l'altezza NON sposta la lettera
   // (la baseline del glifo non cambia): il box si stringe attorno alla lettera ferma.
   const HITBOX_W = 0.82;
-  const HITBOX_H = 0.70;
+  const HITBOX_H = 0.72;
+  // offset verticale del glifo dentro la hitbox (frazione del fontSize): lo abbassa
+  // di qualche px così le maiuscole restano centrate nel box.
+  const GLYPH_OFFSET_Y = 0.06;
 
   // angoli della hitbox: tonde per le lettere curve (O, D...),
   // smusso leggero per quelle dritte (T, L, E, H...).
@@ -642,7 +645,7 @@
         ctx.rotate(b.angle);
         ctx.fillStyle = b.render.fillStyle;
         ctx.font = `700 ${b.fontSize}px "Geist", sans-serif`;
-        ctx.fillText(b.letterChar, 0, b.fontSize * 0.04);
+        ctx.fillText(b.letterChar, 0, b.fontSize * GLYPH_OFFSET_Y);
         ctx.restore();
       });
 
