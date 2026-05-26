@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Tipogravity</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -31,8 +31,8 @@
 
   .ui {
     position: fixed;
-    top: 24px;
-    left: 24px;
+    top: calc(env(safe-area-inset-top) + 24px);
+    left: calc(env(safe-area-inset-left) + 24px);
     z-index: 30;
     pointer-events: none;
   }
@@ -66,7 +66,7 @@
 
   .hint {
     position: fixed;
-    bottom: 28px;
+    bottom: calc(env(safe-area-inset-bottom) + 28px);
     left: 50%;
     transform: translateX(-50%);
     z-index: 10;
@@ -448,6 +448,31 @@
   let currentPreset = "snappy";
   let gripFactor = 0.35; // soglia di slittamento del mouseConstraint
 
+  // margine dai bordi: il glifo disegnato sborda di qualche px dalla sua hitbox,
+  // quindi tengo i muri rientrati così le lettere non vengono tagliate sul bordo.
+  const EDGE_MARGIN = 12;
+
+  // legge i safe-area inset (notch, home indicator, angoli) in px reali.
+  // uso un probe perché env() in getComputedStyle non è affidabile su tutti i browser.
+  let _safeProbe = null;
+  function getSafeInsets() {
+    if (!_safeProbe) {
+      _safeProbe = document.createElement("div");
+      _safeProbe.style.cssText =
+        "position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;" +
+        "padding-top:env(safe-area-inset-top);padding-right:env(safe-area-inset-right);" +
+        "padding-bottom:env(safe-area-inset-bottom);padding-left:env(safe-area-inset-left);";
+      document.body.appendChild(_safeProbe);
+    }
+    const cs = getComputedStyle(_safeProbe);
+    return {
+      top: parseFloat(cs.paddingTop) || 0,
+      right: parseFloat(cs.paddingRight) || 0,
+      bottom: parseFloat(cs.paddingBottom) || 0,
+      left: parseFloat(cs.paddingLeft) || 0,
+    };
+  }
+
   function pickWord() {
     // filtra per sicurezza 7-13 lettere
     const valid = WORD_POOL.filter(w => w.length >= 7 && w.length <= 13);
@@ -617,19 +642,26 @@
     const h = window.innerHeight;
     const t = 200;
 
+    // bordi interni effettivi: rientrati da notch/safe-area + un piccolo margine
+    const s = getSafeInsets();
+    const left   = s.left + EDGE_MARGIN;
+    const right  = w - s.right - EDGE_MARGIN;
+    const top    = s.top + EDGE_MARGIN;
+    const bottom = h - s.bottom - EDGE_MARGIN;
+
     wallBodies = [
       // pavimento
-      Bodies.rectangle(w/2, h + t/2, w * 3, t, { isStatic: true, render: { visible: false } }),
+      Bodies.rectangle(w/2, bottom + t/2, w * 3, t, { isStatic: true, render: { visible: false } }),
       // sinistra
-      Bodies.rectangle(-t/2, h/2, t, h * 3, { isStatic: true, render: { visible: false } }),
+      Bodies.rectangle(left - t/2, h/2, t, h * 3, { isStatic: true, render: { visible: false } }),
       // destra
-      Bodies.rectangle(w + t/2, h/2, t, h * 3, { isStatic: true, render: { visible: false } }),
+      Bodies.rectangle(right + t/2, h/2, t, h * 3, { isStatic: true, render: { visible: false } }),
     ];
 
     if (withCeiling) {
       // soffitto appena sopra il bordo visibile, attivato solo a caduta finita
       wallBodies.push(
-        Bodies.rectangle(w/2, -t/2, w * 3, t, { isStatic: true, render: { visible: false } })
+        Bodies.rectangle(w/2, top - t/2, w * 3, t, { isStatic: true, render: { visible: false } })
       );
     }
 
