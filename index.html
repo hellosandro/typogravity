@@ -463,20 +463,41 @@
   // il corpo fisico è creato più in basso e il disegno del glifo è compensato di pari valore.
   const POLY_OFFSET_Y = 10;
 
-  // angoli della hitbox: tonde per le lettere curve (O, D...),
-  // smusso leggero per quelle dritte (T, L, E, H...).
-  const ROUND_LETTERS = "OQCGSU";        // curve su tutti i lati
-  const RIGHT_ROUND_LETTERS = "DBPRJ";   // curve a destra, piatte a sinistra
-  const CHAMFER_ROUND = 0.95;            // frazione di maxR per gli angoli tondi
-  const CHAMFER_FLAT = 0.22;             // frazione di maxR per lo smusso delle dritte
+  // angoli arrotondati SOLO dove la lettera è curva. Mappa per-angolo [alto-sx, alto-dx,
+  // basso-dx, basso-sx] (ordine dei vertici di Bodies.rectangle); 0 = angolo vivo.
+  // Le lettere non elencate restano spigolose.
+  const CHAMFER_ROUND = 0.9;             // frazione di maxR per gli angoli tondi
+  const CORNER_MAP = {
+    O: [1,1,1,1], Q: [1,1,1,1], S: [1,1,1,1], C: [1,1,1,1], G: [1,1,1,1],
+    U: [0,0,1,1],                         // tonda in basso
+    D: [0,1,1,0], B: [0,1,1,0],           // tonde a destra
+    P: [0,1,0,0], R: [0,1,0,0],           // solo alto-destra
+    J: [0,0,0,1],                         // gancio in basso-sx
+  };
   function letterChamfer(char, w, h) {
-    const maxR = Math.min(w, h) / 2;
-    const round = maxR * CHAMFER_ROUND;
-    const flat = maxR * CHAMFER_FLAT;
-    if (ROUND_LETTERS.includes(char)) return { radius: round };
-    // vertici del rettangolo in ordine: alto-sx, alto-dx, basso-dx, basso-sx
-    if (RIGHT_ROUND_LETTERS.includes(char)) return { radius: [flat, round, round, flat] };
-    return { radius: flat };
+    const c = CORNER_MAP[char];
+    if (!c) return undefined;             // angoli vivi
+    const r = Math.min(w, h) / 2 * CHAMFER_ROUND;
+    return { radius: [c[0]*r, c[1]*r, c[2]*r, c[3]*r] };
+  }
+
+  // lettere composte da più rettangoli (collisione fedele con spazi vuoti).
+  // I parti sono definiti attorno all'origine (centro del box). Spessore tratto ~0.16em.
+  function letterParts(char, w, h, fontSize, opts) {
+    const ST = fontSize * 0.16;           // spessore asta verticale
+    const BT = fontSize * 0.16;           // spessore barra orizzontale
+    const mk = (cx, cy, pw, ph) => Bodies.rectangle(cx, cy, pw, ph, opts);
+    if (char === "T") {
+      return [ mk(0, -h/2 + BT/2, w, BT), mk(0, 0, ST, h) ];
+    }
+    if (char === "H") {
+      return [ mk(-w/2 + ST/2, 0, ST, h), mk(w/2 - ST/2, 0, ST, h), mk(0, 0, w, BT) ];
+    }
+    if (char === "F") {
+      const midW = w * 0.8;
+      return [ mk(-w/2 + ST/2, 0, ST, h), mk(0, -h/2 + BT/2, w, BT), mk(-w/2 + midW/2, 0, midW, BT) ];
+    }
+    return null;
   }
 
   // legge i safe-area inset (notch, home indicator, angoli) in px reali.
@@ -647,21 +668,25 @@
         ctx.rotate(b.angle);
         ctx.fillStyle = b.render.fillStyle;
         ctx.font = `700 ${b.fontSize}px "Geist", sans-serif`;
-        ctx.fillText(b.letterChar, 0, b.fontSize * GLYPH_OFFSET_Y - POLY_OFFSET_Y);
+        ctx.fillText(b.letterChar, b.bcx || 0, (b.bcy || 0) + b.fontSize * GLYPH_OFFSET_Y - POLY_OFFSET_Y);
         ctx.restore();
       });
 
-      // contorno della hitbox: mostra la zona di impatto reale (ruota col corpo)
+      // contorno della hitbox: mostra la zona di impatto reale (ruota col corpo).
+      // per i corpi composti traccio ogni parte (parts[0] è solo il guscio convesso).
       ctx.lineWidth = 2;
       ctx.strokeStyle = "rgba(255,255,255,0.7)";
       letterBodies.forEach(b => {
-        const v = b.vertices;
-        if (!v || v.length === 0) return;
-        ctx.beginPath();
-        ctx.moveTo(v[0].x, v[0].y);
-        for (let i = 1; i < v.length; i++) ctx.lineTo(v[i].x, v[i].y);
-        ctx.closePath();
-        ctx.stroke();
+        const segs = (b.parts && b.parts.length > 1) ? b.parts.slice(1) : [b];
+        segs.forEach(part => {
+          const v = part.vertices;
+          if (!v || v.length === 0) return;
+          ctx.beginPath();
+          ctx.moveTo(v[0].x, v[0].y);
+          for (let i = 1; i < v.length; i++) ctx.lineTo(v[i].x, v[i].y);
+          ctx.closePath();
+          ctx.stroke();
+        });
       });
     });
 
@@ -862,19 +887,47 @@
     const collisionW = p.letterW * HITBOX_W;
     const collisionH = p.fontSize * HITBOX_H;
     const preset = PRESETS[currentPreset];
-
-    const body = Bodies.rectangle(p.x, p.y + POLY_OFFSET_Y, collisionW, collisionH, {
-      isStatic: true,
-      chamfer: letterChamfer(p.char, collisionW, collisionH),
+    const cx = p.x;
+    const cy = p.y + POLY_OFFSET_Y;
+    const partOpts = {
       restitution: preset.restitution,
       friction: preset.friction,
-      frictionAir: preset.frictionAir,
       density: preset.density,
       slop: 0.02,
       render: { fillStyle: color, visible: false }
-    });
+    };
+
+    const parts = letterParts(p.char, collisionW, collisionH, p.fontSize, partOpts);
+
+    let body;
+    let bcx = 0, bcy = 0;   // centro del box nel frame locale del corpo
+    if (parts) {
+      // corpo composto: i parti sono attorno all'origine (centro del box).
+      body = Body.create({ parts: parts });
+      // Body.create posiziona il corpo sul baricentro: l'origine-box (0,0) rispetto
+      // al baricentro vale -position, e serve per disegnare il glifo allineato.
+      bcx = -body.position.x;
+      bcy = -body.position.y;
+      Body.translate(body, { x: cx, y: cy });   // porta l'origine-box su (cx, cy)
+      body.frictionAir = preset.frictionAir;
+      Body.setStatic(body, true);
+    } else {
+      body = Bodies.rectangle(cx, cy, collisionW, collisionH, {
+        isStatic: true,
+        chamfer: letterChamfer(p.char, collisionW, collisionH),
+        restitution: preset.restitution,
+        friction: preset.friction,
+        frictionAir: preset.frictionAir,
+        density: preset.density,
+        slop: 0.02,
+        render: { fillStyle: color, visible: false }
+      });
+    }
     body.letterChar = p.char;
     body.fontSize = p.fontSize;
+    body.bcx = bcx;
+    body.bcy = bcy;
+    body.render.fillStyle = color;   // colore del glifo (il parent composto non lo eredita)
 
     Composite.add(engine.world, body);
     letterBodies.push(body);
