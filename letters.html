@@ -150,48 +150,6 @@
     return parts;
   }
 
-  // Campiona i pixel del glifo e lo scompone in fasce orizzontali: cattura curve e
-  // controforme (i buchi) perché ogni riga può avere più segmenti separati.
-  function slabBody(ch, fontSize, opts) {
-    const size = Math.ceil(fontSize * 1.9);
-    const Cx = Math.round(size / 2), Cy = Math.round(size / 2);
-    const glyphRelY = fontSize * GLYPH_OFFSET_Y - POLY_OFFSET_Y;
-    const off = document.createElement("canvas");
-    off.width = size; off.height = size;
-    const o = off.getContext("2d");
-    o.fillStyle = "#fff";
-    o.textAlign = "center";
-    o.textBaseline = "middle";
-    o.font = `700 ${fontSize}px "Geist", sans-serif`;
-    o.fillText(ch, Cx, Cy + glyphRelY);
-    const data = o.getImageData(0, 0, size, size).data;
-    const A = (x, y) => data[(y * size + x) * 4 + 3];
-
-    let top = -1, bot = -1;
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) { if (A(x, y) > 40) { if (top < 0) top = y; bot = y; break; } }
-    }
-    if (top < 0) return null;
-
-    const slab = Math.max(4, Math.round(fontSize * 0.05));
-    const parts = [];
-    for (let y = top; y <= bot; y += slab) {
-      const row = Math.min(Math.round(y + slab / 2), bot);
-      let x = 0;
-      while (x < size) {
-        if (A(x, row) > 40) {
-          const x0 = x;
-          while (x < size && A(x, row) > 40) x++;
-          const x1 = x - 1;
-          if (x1 - x0 + 1 >= 3) {
-            parts.push(Bodies.rectangle((x0 + x1) / 2 - Cx, (y + slab / 2) - Cy, (x1 - x0 + 1), slab, opts));
-          }
-        } else x++;
-      }
-    }
-    return parts.length ? parts : null;
-  }
-
   function letterParts(char, w, h, fontSize, opts) {
     const ST = fontSize * 0.16;
     const BT = ST * BAR_COMPENSATION;
@@ -206,9 +164,23 @@
       const t = (yc + h/2) / h;
       return [ mk(-w/4, 0, legLen, ST, -legAng), mk(w/4, 0, legLen, ST, legAng), mk(0, yc, t * w, BT) ];
     }
-    if (char === "J" || char === "P") {
-      const s = slabBody(char, fontSize, opts);
-      if (s) return s;
+    if (char === "P") {
+      // occhiello (box con angoli destri tondi) + asta verticale sinistra
+      const bowlH = h * 0.55;
+      const r = bowlH / 2 * 0.9;
+      return [
+        Bodies.rectangle(-w/2 + ST/2, 0, ST, h, opts),
+        Bodies.rectangle(0, -h/2 + bowlH/2, w, bowlH, Object.assign({}, opts, { chamfer: { radius: [0, r, r, 0] } })),
+      ];
+    }
+    if (char === "J") {
+      // fondo (box con angoli bassi tondi) + asta verticale destra
+      const botH = h * 0.42;
+      const r = Math.min(w, botH) / 2 * 0.9;
+      return [
+        Bodies.rectangle(w/2 - ST/2, -botH/4, ST, h - botH/2, opts),
+        Bodies.rectangle(0, h/2 - botH/2, w, botH, Object.assign({}, opts, { chamfer: { radius: [0, 0, r, r] } })),
+      ];
     }
     if (char === "T") { const barW = w*1.15, barH = BT*0.8; return [ mk(0, -h/2 + barH/2, barW, barH), mk(0, 0, ST, h) ]; }
     if (char === "H") return [ mk(-w/2 + ST/2, 0, ST, h), mk(w/2 - ST/2, 0, ST, h), mk(0, 0, w, BT) ];
