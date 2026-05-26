@@ -206,6 +206,58 @@
     return null;
   }
 
+  // Ingombro reale dell'inchiostro del glifo, in coordinate-design (origine = centro box).
+  function inkBounds(ch, fontSize) {
+    const size = Math.ceil(fontSize * 1.9);
+    const Cx = Math.round(size / 2), Cy = Math.round(size / 2);
+    const glyphRelY = fontSize * GLYPH_OFFSET_Y - POLY_OFFSET_Y;
+    const off = document.createElement("canvas");
+    off.width = size; off.height = size;
+    const o = off.getContext("2d");
+    o.fillStyle = "#fff";
+    o.textAlign = "center";
+    o.textBaseline = "middle";
+    o.font = `700 ${fontSize}px "Geist", sans-serif`;
+    o.fillText(ch, Cx, Cy + glyphRelY);
+    const data = o.getImageData(0, 0, size, size).data;
+    const A = (x, y) => data[(y * size + x) * 4 + 3];
+    let iT = -1, iB = -1, iL = size, iR = -1;
+    for (let y = 0; y < size; y++) {
+      let rh = false;
+      for (let x = 0; x < size; x++) { if (A(x, y) > 40) { rh = true; if (x < iL) iL = x; if (x > iR) iR = x; } }
+      if (rh) { if (iT < 0) iT = y; iB = y; }
+    }
+    if (iT < 0) return null;
+    return { L: iL - Cx, R: iR - Cx, T: iT - Cy, B: iB - Cy };
+  }
+
+  // Lettere diagonali: tratti come rettangoli ruotati tra i punti chiave dell'ingombro.
+  function diagonalLetter(ch, fontSize, opts) {
+    const b = inkBounds(ch, fontSize);
+    if (!b) return null;
+    const { L, R, T, B } = b;
+    const cx = (L + R) / 2, cy = (T + B) / 2, W = R - L, H = B - T;
+    const t = fontSize * 0.16;
+    // tratto diagonale tra (x1,y1)-(x2,y2)
+    const D = (x1, y1, x2, y2) => Bodies.rectangle(
+      (x1 + x2) / 2, (y1 + y2) / 2, Math.hypot(x2 - x1, y2 - y1), t,
+      Object.assign({}, opts, { angle: Math.atan2(y2 - y1, x2 - x1) })
+    );
+    const Vbar = x => Bodies.rectangle(x, cy, t, H, opts);                 // asta verticale piena
+    const seg = (x, y0, y1) => Bodies.rectangle(x, (y0 + y1) / 2, t, (y1 - y0), opts);
+    switch (ch) {
+      case "V": return [ D(L, T, cx, B), D(R, T, cx, B) ];
+      case "X": return [ D(L, T, R, B), D(R, T, L, B) ];
+      case "Y": return [ D(L, T, cx, cy), D(R, T, cx, cy), seg(cx, cy, B) ];
+      case "K": return [ Vbar(L + t/2), D(L + t, cy, R, T), D(L + t, cy, R, B) ];
+      case "N": return [ Vbar(L + t/2), Vbar(R - t/2), D(L, T, R, B) ];
+      case "M": { const vy = T + 0.62 * H; return [ Vbar(L + t/2), Vbar(R - t/2), D(L + t/2, T, cx, vy), D(R - t/2, T, cx, vy) ]; }
+      case "W": { const mt = T + 0.40 * H, x1 = cx - 0.26 * W, x2 = cx + 0.26 * W;
+        return [ D(L, T, x1, B), D(x1, B, cx, mt), D(cx, mt, x2, B), D(x2, B, R, T) ]; }
+    }
+    return null;
+  }
+
   function letterParts(char, w, h, fontSize, opts) {
     const ST = fontSize * 0.16;
     const BT = ST * BAR_COMPENSATION;
@@ -219,6 +271,10 @@
       const yc = h * 0.16;
       const t = (yc + h/2) / h;
       return [ mk(-w/4, 0, legLen, ST, -legAng), mk(w/4, 0, legLen, ST, legAng), mk(0, yc, t * w, BT) ];
+    }
+    if ("VXYKMNW".indexOf(char) >= 0) {
+      const d = diagonalLetter(char, fontSize, opts);
+      if (d) return d;
     }
     if (char === "P") {
       const s = sampleJP("P", fontSize, opts);
