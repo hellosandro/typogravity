@@ -33,7 +33,7 @@
     position: fixed;
     top: 24px;
     left: 24px;
-    z-index: 10;
+    z-index: 30;
     pointer-events: none;
   }
   .ui .eyebrow {
@@ -48,7 +48,7 @@
   .ui .title {
     font-family: 'Geist', sans-serif;
     font-weight: 900;
-    font-size: 15px;
+    font-size: 17px;
     letter-spacing: -0.01em;
     color: #ffffff;
     margin-top: 4px;
@@ -81,23 +81,6 @@
   }
   .hint.fade { opacity: 0; }
 
-  .controls {
-    position: fixed;
-    top: 14px;
-    right: 10px;
-    z-index: 10;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 2px;
-  }
-  .menu {
-    display: none;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 0;
-  }
-  .menu.open { display: flex; }
   .btn-text-link {
     background: none;
     border: none;
@@ -235,7 +218,6 @@
     z-index: 20;
     display: flex;
     flex-direction: column;
-    justify-content: center;
     padding: 0 6vw;
     text-align: left;
     background: rgba(10, 10, 10, 0.85);
@@ -245,6 +227,19 @@
     transition: opacity 0.8s ease;
   }
   .tap-info.show { opacity: 1; }
+  .tap-text {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .tap-actions {
+    display: flex;
+    gap: 28px;
+    margin-left: -14px;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 6vw);
+  }
+  .tap-actions .btn-text-link { pointer-events: auto; }
   .tap-info .tap-word {
     display: block;
     font-family: 'Geist', sans-serif;
@@ -297,15 +292,6 @@
   <div class="title">TIPOGRAVITY</div>
 </div>
 
-<div class="controls">
-  <button class="btn-text-link" id="menuBtn" aria-label="Menu" aria-expanded="false">Menu</button>
-  <nav class="menu" id="menu" aria-hidden="true">
-    <button class="btn-text-link" id="menuInfo">Info</button>
-    <button class="btn-text-link" id="menuNewWord">New word</button>
-    <button class="btn-text-link" id="menuCredits">Crediti</button>
-  </nav>
-</div>
-
 <div id="world"></div>
 
 <div class="presets" id="presets">
@@ -322,10 +308,22 @@
   <button class="preset-btn active" data-grip="0.35">0.35</button>
 </div>
 
+<div class="tap-info" id="tapHint" aria-hidden="true">
+  <div class="tap-text">
+    <span class="tap-def">tap for more info</span>
+  </div>
+</div>
+
 <div class="tap-info" id="tapInfo" aria-hidden="true">
-  <span class="tap-word" id="tapWord"></span>
-  <span class="tap-type" id="tapType"></span>
-  <span class="tap-def" id="tapDef"></span>
+  <div class="tap-text">
+    <span class="tap-word" id="tapWord"></span>
+    <span class="tap-type" id="tapType"></span>
+    <span class="tap-def" id="tapDef"></span>
+  </div>
+  <div class="tap-actions">
+    <button class="btn-text-link" id="tapNewWord">+ New word</button>
+    <button class="btn-text-link" id="tapCredits">Credits</button>
+  </div>
 </div>
 
 <div class="credits" id="infoOverlay" aria-hidden="true">
@@ -494,17 +492,15 @@
   let ceilingActive = false;
 
   const world = document.getElementById("world");
-  const menuBtn = document.getElementById("menuBtn");
-  const menu = document.getElementById("menu");
-  const menuInfo = document.getElementById("menuInfo");
-  const menuNewWord = document.getElementById("menuNewWord");
-  const menuCredits = document.getElementById("menuCredits");
   const infoOverlay = document.getElementById("infoOverlay");
   const infoClose = document.getElementById("infoClose");
+  const tapHint = document.getElementById("tapHint");
   const tapInfo = document.getElementById("tapInfo");
   const tapWordEl = document.getElementById("tapWord");
   const tapTypeEl = document.getElementById("tapType");
   const tapDefEl = document.getElementById("tapDef");
+  const tapNewWord = document.getElementById("tapNewWord");
+  const tapCredits = document.getElementById("tapCredits");
 
   function setup() {
     engine = Engine.create();
@@ -916,33 +912,36 @@
   }
   infoClose.addEventListener("click", (e) => { e.stopPropagation(); closeInfo(); });
 
-  // MENU: Info → definizione, New word → restart, Crediti → overlay crediti
-  function openMenu() {
-    menu.classList.add("open");
-    menu.setAttribute("aria-hidden", "false");
-    menuBtn.setAttribute("aria-expanded", "true");
-  }
-  function closeMenu() {
-    menu.classList.remove("open");
-    menu.setAttribute("aria-hidden", "true");
-    menuBtn.setAttribute("aria-expanded", "false");
-  }
-  menuBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (menu.classList.contains("open")) closeMenu(); else openMenu();
-  });
-  menuInfo.addEventListener("click", (e) => { e.stopPropagation(); closeMenu(); showTapInfo(); });
-  menuNewWord.addEventListener("click", (e) => { e.stopPropagation(); closeMenu(); reset(); });
-  menuCredits.addEventListener("click", (e) => { e.stopPropagation(); closeMenu(); openInfo(); });
-  document.addEventListener("click", (e) => {
-    if (menu.classList.contains("open") && !e.target.closest(".controls")) closeMenu();
-  });
+  // azioni in fondo alla schermata definizione
+  tapNewWord.addEventListener("click", (e) => { e.stopPropagation(); hideTapInfo(); reset(); });
+  tapCredits.addEventListener("click", (e) => { e.stopPropagation(); hideTapInfo(); openInfo(); });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      if (infoOverlay.classList.contains("visible")) closeInfo();
-      closeMenu();
-    }
+    if (e.key !== "Escape") return;
+    if (infoOverlay.classList.contains("visible")) closeInfo();
+    hideTapInfo();
+    hideHint();
   });
+
+  // help di onboarding: appare alla prima visita, stesso stile della definizione
+  let hintTimer = null;
+  function hideHint() {
+    if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
+    tapHint.classList.remove("show");
+    tapHint.setAttribute("aria-hidden", "true");
+  }
+  function showHint() {
+    tapHint.classList.add("show");
+    tapHint.setAttribute("aria-hidden", "false");
+    if (hintTimer) clearTimeout(hintTimer);
+    hintTimer = setTimeout(hideHint, 5000);
+  }
+  function maybeShowFirstVisitHint() {
+    let seen = false;
+    try { seen = !!localStorage.getItem("tg_hint_seen"); } catch (e) {}
+    if (seen) return;
+    try { localStorage.setItem("tg_hint_seen", "1"); } catch (e) {}
+    setTimeout(showHint, 1400);
+  }
 
   // testo spiegazione: definizione della parola corrente, in sovraimpressione
   let tapHideTimer = null;
@@ -995,7 +994,8 @@
     const dt = Date.now() - pressInfo.t;
     const moved = Math.hypot(e.clientX - pressInfo.x, e.clientY - pressInfo.y);
     if (dt < TAP_TIME && moved < TAP_MOVE) {
-      if (tapInfo.classList.contains("show")) hideTapInfo();
+      if (tapHint.classList.contains("show")) { hideHint(); showTapInfo(); }
+      else if (tapInfo.classList.contains("show")) hideTapInfo();
       else showTapInfo();
     }
     pressInfo = null;
@@ -1022,6 +1022,7 @@
     setup();
     applyPreset(currentPreset); // applica i settings del preset di default
     startAutoDrop();
+    maybeShowFirstVisitHint();
   });
 </script>
 </body>
