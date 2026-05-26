@@ -468,7 +468,7 @@
   // basso-dx, basso-sx] (ordine dei vertici di Bodies.rectangle); 0 = angolo vivo.
   // Le lettere non elencate restano spigolose.
   const CHAMFER_ROUND = 0.9;             // frazione di maxR per gli angoli tondi
-  const ROUND_OVERRIDE = { O: 0.98 };    // roundness specifica per lettera (frazione di maxR)
+  const ROUND_OVERRIDE = { O: 0.98, D: 0.98, C: 0.98, S: 0.98 };  // roundness specifica (frazione di maxR)
   const WIDTH_BONUS = { O: 4 };          // px extra di larghezza hitbox per lettera
   const BAR_COMPENSATION = 0.94;         // compensazione ottica: spessore barre orizzontali vs aste verticali
   const CORNER_MAP = {
@@ -689,23 +689,6 @@
         ctx.font = `700 ${b.fontSize}px "Geist", sans-serif`;
         ctx.fillText(b.letterChar, b.bcx || 0, (b.bcy || 0) + b.fontSize * GLYPH_OFFSET_Y - POLY_OFFSET_Y);
         ctx.restore();
-      });
-
-      // contorno della hitbox: mostra la zona di impatto reale (ruota col corpo).
-      // per i corpi composti traccio ogni parte (parts[0] è solo il guscio convesso).
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = "rgba(255,255,255,0.7)";
-      letterBodies.forEach(b => {
-        const segs = (b.parts && b.parts.length > 1) ? b.parts.slice(1) : [b];
-        segs.forEach(part => {
-          const v = part.vertices;
-          if (!v || v.length === 0) return;
-          ctx.beginPath();
-          ctx.moveTo(v[0].x, v[0].y);
-          for (let i = 1; i < v.length; i++) ctx.lineTo(v[i].x, v[i].y);
-          ctx.closePath();
-          ctx.stroke();
-        });
       });
     });
 
