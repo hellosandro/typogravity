@@ -147,23 +147,26 @@
 
   /* CREDITS OVERLAY */
   .credits {
-    display: none;
     position: fixed;
     inset: 0;
     background: #0a0a0a;
     z-index: 100;
     padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    display: flex;
     flex-direction: column;
-    justify-content: space-between;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.8s ease;
   }
-  .credits.visible { display: flex; }
+  .credits.visible { opacity: 1; pointer-events: auto; }
 
   .credits-body {
     flex: 1;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
-    padding: 0 6vw 6vw 6vw;
+    justify-content: center;
+    padding: 0 6vw;
     gap: 28px;
   }
   .credits-col p {
@@ -183,29 +186,11 @@
   }
   .credits-col strong { font-weight: 500; }
 
-  .credits-close {
-    position: absolute;
-    top: calc(env(safe-area-inset-top) + 20px);
-    right: calc(env(safe-area-inset-right) + 24px);
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: #ffffff;
-    font-family: 'Geist', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-weight: 500;
-    font-size: 17px;
-    line-height: 1;
-    letter-spacing: -0.01em;
-    padding: 0;
-    -webkit-tap-highlight-color: transparent;
-    z-index: 101;
-  }
-
   /* Landscape: 2 colonne affiancate */
   @media (orientation: landscape) {
     .credits-body {
       flex-direction: row;
-      align-items: flex-end;
+      align-items: center;
       gap: 6vw;
     }
     .credits-col { flex: 1; }
@@ -327,7 +312,6 @@
 </div>
 
 <div class="credits" id="infoOverlay" aria-hidden="true">
-  <button class="credits-close" id="infoClose">Close</button>
   <div class="credits-body">
     <div class="credits-col credits-col-2">
       <p>
@@ -493,7 +477,6 @@
 
   const world = document.getElementById("world");
   const infoOverlay = document.getElementById("infoOverlay");
-  const infoClose = document.getElementById("infoClose");
   const tapHint = document.getElementById("tapHint");
   const tapInfo = document.getElementById("tapInfo");
   const tapWordEl = document.getElementById("tapWord");
@@ -902,15 +885,23 @@
   }
 
   // CREDITS overlay: solo crediti del progetto
+  let creditsTimer = null;
   function openInfo() {
     infoOverlay.classList.add("visible");
     infoOverlay.setAttribute("aria-hidden", "false");
+    if (creditsTimer) clearTimeout(creditsTimer);
+    creditsTimer = setTimeout(closeInfo, 8000);
   }
   function closeInfo() {
+    if (creditsTimer) { clearTimeout(creditsTimer); creditsTimer = null; }
     infoOverlay.classList.remove("visible");
     infoOverlay.setAttribute("aria-hidden", "true");
   }
-  infoClose.addEventListener("click", (e) => { e.stopPropagation(); closeInfo(); });
+  // tap per chiudere i crediti, ma lascia attivo il link del portfolio
+  infoOverlay.addEventListener("click", (e) => {
+    if (e.target.closest("a")) return;
+    closeInfo();
+  });
 
   // azioni in fondo alla schermata definizione
   tapNewWord.addEventListener("click", (e) => { e.stopPropagation(); hideTapInfo(); reset(); });
