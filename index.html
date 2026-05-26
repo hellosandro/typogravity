@@ -468,6 +468,8 @@
   // basso-dx, basso-sx] (ordine dei vertici di Bodies.rectangle); 0 = angolo vivo.
   // Le lettere non elencate restano spigolose.
   const CHAMFER_ROUND = 0.9;             // frazione di maxR per gli angoli tondi
+  const ROUND_OVERRIDE = { O: 0.98 };    // roundness specifica per lettera (frazione di maxR)
+  const WIDTH_BONUS = { O: 4 };          // px extra di larghezza hitbox per lettera
   const CORNER_MAP = {
     O: [1,1,1,1], Q: [1,1,1,1], S: [1,1,1,1], C: [1,1,1,1], G: [1,1,1,1],
     U: [0,0,1,1],                         // tonda in basso
@@ -478,7 +480,7 @@
   function letterChamfer(char, w, h) {
     const c = CORNER_MAP[char];
     if (!c) return undefined;             // angoli vivi
-    const r = Math.min(w, h) / 2 * CHAMFER_ROUND;
+    const r = Math.min(w, h) / 2 * (ROUND_OVERRIDE[char] || CHAMFER_ROUND);
     return { radius: [c[0]*r, c[1]*r, c[2]*r, c[3]*r] };
   }
 
@@ -495,8 +497,23 @@
       return [ mk(-w/2 + ST/2, 0, ST, h), mk(w/2 - ST/2, 0, ST, h), mk(0, 0, w, BT) ];
     }
     if (char === "F") {
-      const midW = w * 0.8;
+      const midW = w * 0.92;              // barra centrale simile in larghezza a quella alta
       return [ mk(-w/2 + ST/2, 0, ST, h), mk(0, -h/2 + BT/2, w, BT), mk(-w/2 + midW/2, 0, midW, BT) ];
+    }
+    if (char === "E") {
+      const midW = w * 0.8;               // barra centrale leggermente più corta
+      return [
+        mk(-w/2 + ST/2, 0, ST, h),        // asta sinistra
+        mk(0, -h/2 + BT/2, w, BT),        // barra alto
+        mk(-w/2 + midW/2, 0, midW, BT),   // barra centrale
+        mk(0, h/2 - BT/2, w, BT),         // barra basso
+      ];
+    }
+    if (char === "L") {
+      return [ mk(-w/2 + ST/2, 0, ST, h), mk(0, h/2 - BT/2, w, BT) ];
+    }
+    if (char === "I") {
+      return [ mk(0, 0, ST, h) ];         // sola asta verticale
     }
     return null;
   }
@@ -885,7 +902,7 @@
 
   function placeStaticLetter(p) {
     const color = COLORS[p.idx % COLORS.length];
-    const collisionW = p.letterW * HITBOX_W;
+    const collisionW = p.letterW * HITBOX_W + (WIDTH_BONUS[p.char] || 0);
     const collisionH = p.fontSize * HITBOX_H;
     const preset = PRESETS[currentPreset];
     const cx = p.x;
