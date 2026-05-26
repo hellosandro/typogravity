@@ -4,7 +4,7 @@ A physics playground for typography lovers.
 
 Random words from the world of type design — technical terms and surnames of legendary type designers — appear letter by letter, then collapse under gravity. Drag the letters around, watch them rearrange as gravity flips every 8 seconds. Click `?` to learn about the current word.
 
-**Live:** [tipogravity.vercel.app](https://tipogravity.vercel.app) (placeholder)
+**Live:** [typogravity.vercel.app](https://typogravity.vercel.app)
 **Author:** [Sandro Stefanelli](https://sandrostefanelli.com)
 
 ---
