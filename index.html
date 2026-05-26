@@ -35,9 +35,9 @@
     left: 24px;
     z-index: 10;
     pointer-events: none;
-    display: none;
   }
   .ui .eyebrow {
+    display: none;
     font-size: 11px;
     letter-spacing: 0.18em;
     text-transform: uppercase;
@@ -185,33 +185,12 @@
     margin: 0 0 18px 0;
   }
   .credits-col p:last-child { margin-bottom: 0; }
-  .credits-col-1 p {
-    font-size: 34px;
-    line-height: 1.1;
-    margin-bottom: 0;
-  }
   .credits-col a {
     color: #ffffff;
     text-decoration: none;
     border-bottom: 1.5px solid #ffffff;
   }
   .credits-col strong { font-weight: 500; }
-  .info-word {
-    font-weight: 500;
-    letter-spacing: -0.01em;
-    text-transform: none;
-  }
-  .info-type {
-    font-weight: 400;
-    opacity: 1;
-    font-style: italic;
-    text-transform: none;
-  }
-  .info-def {
-    font-weight: 500;
-    opacity: 0.85;
-    text-transform: none;
-  }
 
   .credits-close {
     position: absolute;
@@ -241,6 +220,47 @@
     .credits-col { flex: 1; }
   }
 
+  /* TESTO SPIEGAZIONE AL TAP */
+  .tap-info {
+    position: fixed;
+    left: 50%;
+    bottom: calc(env(safe-area-inset-bottom) + 28px);
+    transform: translateX(-50%);
+    z-index: 20;
+    width: min(560px, 88vw);
+    text-align: center;
+    color: #ffffff;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+  }
+  .tap-info.show { opacity: 1; }
+  .tap-info .tap-word {
+    display: block;
+    font-family: 'Geist', sans-serif;
+    font-weight: 500;
+    font-size: 15px;
+    letter-spacing: 0.02em;
+  }
+  .tap-info .tap-type {
+    display: block;
+    font-family: 'Geist', sans-serif;
+    font-weight: 400;
+    font-style: italic;
+    font-size: 13px;
+    opacity: 0.7;
+    margin-top: 2px;
+  }
+  .tap-info .tap-def {
+    display: block;
+    font-family: 'Geist', sans-serif;
+    font-weight: 400;
+    font-size: 13px;
+    line-height: 1.35;
+    opacity: 0.85;
+    margin-top: 7px;
+  }
+
   .counter {
     position: fixed;
     bottom: 24px;
@@ -266,8 +286,7 @@
 </div>
 
 <div class="controls">
-  <button class="btn-text-link" id="resetBtn" aria-label="Reset">Restart</button>
-  <button class="btn-text-link" id="infoBtn" aria-label="Info">Info</button>
+  <button class="btn-text-link" id="infoBtn" aria-label="Credits">Credits</button>
 </div>
 
 <div id="world"></div>
@@ -286,16 +305,15 @@
   <button class="preset-btn active" data-grip="0.35">0.35</button>
 </div>
 
+<div class="tap-info" id="tapInfo" aria-hidden="true">
+  <span class="tap-word" id="tapWord"></span>
+  <span class="tap-type" id="tapType"></span>
+  <span class="tap-def" id="tapDef"></span>
+</div>
+
 <div class="credits" id="infoOverlay" aria-hidden="true">
   <button class="credits-close" id="infoClose">Close</button>
   <div class="credits-body">
-    <div class="credits-col credits-col-1">
-      <p>
-        <span class="info-word" id="infoWord">—</span><br>
-        <span class="info-type" id="infoType"></span>
-      </p>
-      <p class="info-def" id="infoDef"></p>
-    </div>
     <div class="credits-col credits-col-2">
       <p>
         <strong>Tipogravity</strong><br>
@@ -459,13 +477,13 @@
   let ceilingActive = false;
 
   const world = document.getElementById("world");
-  const resetBtn = document.getElementById("resetBtn");
   const infoBtn = document.getElementById("infoBtn");
   const infoOverlay = document.getElementById("infoOverlay");
   const infoClose = document.getElementById("infoClose");
-  const infoWordEl = document.getElementById("infoWord");
-  const infoTypeEl = document.getElementById("infoType");
-  const infoDefEl = document.getElementById("infoDef");
+  const tapInfo = document.getElementById("tapInfo");
+  const tapWordEl = document.getElementById("tapWord");
+  const tapTypeEl = document.getElementById("tapType");
+  const tapDefEl = document.getElementById("tapDef");
 
   function setup() {
     engine = Engine.create();
@@ -533,6 +551,37 @@
         constraint.pointA.x = anchorWorld.x + dx * ratio;
         constraint.pointA.y = anchorWorld.y + dy * ratio;
       }
+    });
+
+    // CONTENIMENTO: cappa la velocità così nessuna lettera può attraversare un muro
+    // in un singolo step (tunneling) e schizzare fuori. Rete di sicurezza finale:
+    // se una lettera finisce comunque oltre il bordo, la riporto dentro e azzero la spinta.
+    Events.on(engine, "beforeUpdate", () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      const MAX_SPEED = 90;       // px per step: ben sotto lo spessore muri (200)
+      const MAX_ANGULAR = 0.6;
+      const margin = 250;
+      letterBodies.forEach(b => {
+        if (b.isStatic) return;
+        const speed = Math.hypot(b.velocity.x, b.velocity.y);
+        if (speed > MAX_SPEED) {
+          const s = MAX_SPEED / speed;
+          Body.setVelocity(b, { x: b.velocity.x * s, y: b.velocity.y * s });
+        }
+        if (Math.abs(b.angularVelocity) > MAX_ANGULAR) {
+          Body.setAngularVelocity(b, Math.sign(b.angularVelocity) * MAX_ANGULAR);
+        }
+        if (b.position.x < -margin || b.position.x > w + margin ||
+            b.position.y < -margin || b.position.y > h + margin) {
+          Body.setPosition(b, {
+            x: Math.min(Math.max(b.position.x, 60), w - 60),
+            y: Math.min(Math.max(b.position.y, 60), h - 60)
+          });
+          Body.setVelocity(b, { x: 0, y: 0 });
+          Body.setAngularVelocity(b, 0);
+        }
+      });
     });
 
     // custom render per lettere con font
@@ -835,13 +884,8 @@
     if (gravityTimer) { clearInterval(gravityTimer); gravityTimer = null; }
   }
 
-  resetBtn.addEventListener("click", (e) => { e.stopPropagation(); reset(); });
-
+  // CREDITS: mostra solo i crediti del progetto (niente definizione)
   function openInfo() {
-    const entry = DICTIONARY[WORD] || { type: "", def: "No definition available." };
-    infoWordEl.textContent = WORD.charAt(0).toUpperCase() + WORD.slice(1).toLowerCase();
-    infoTypeEl.textContent = entry.type || "";
-    infoDefEl.textContent = entry.def || "";
     infoOverlay.classList.add("visible");
     infoOverlay.setAttribute("aria-hidden", "false");
   }
@@ -853,6 +897,62 @@
   infoClose.addEventListener("click", (e) => { e.stopPropagation(); closeInfo(); });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && infoOverlay.classList.contains("visible")) closeInfo();
+  });
+
+  // testo spiegazione: definizione della parola corrente, in sovraimpressione
+  let tapHideTimer = null;
+  function showTapInfo() {
+    const entry = DICTIONARY[WORD] || { type: "", def: "No definition available." };
+    tapWordEl.textContent = WORD.charAt(0).toUpperCase() + WORD.slice(1).toLowerCase();
+    tapTypeEl.textContent = entry.type || "";
+    tapDefEl.textContent = entry.def || "";
+    tapInfo.classList.add("show");
+    tapInfo.setAttribute("aria-hidden", "false");
+    if (tapHideTimer) clearTimeout(tapHideTimer);
+    tapHideTimer = setTimeout(() => {
+      tapInfo.classList.remove("show");
+      tapInfo.setAttribute("aria-hidden", "true");
+    }, 5000);
+  }
+
+  // gesti sul canvas: tap = mostra spiegazione, long-press = nuova parola.
+  // un trascinamento oltre soglia non scatena né tap né long-press,
+  // così il drag delle lettere resta libero.
+  let pressInfo = null;
+  let longPressTimer = null;
+  let longPressFired = false;
+  const TAP_MOVE = 12;      // px: oltre questa soglia è un drag
+  const TAP_TIME = 300;     // ms: entro questo tempo è un tap
+  const LONG_PRESS = 600;   // ms: oltre questo è long-press → restart
+
+  world.addEventListener("pointerdown", (e) => {
+    pressInfo = { x: e.clientX, y: e.clientY, t: Date.now() };
+    longPressFired = false;
+    if (longPressTimer) clearTimeout(longPressTimer);
+    longPressTimer = setTimeout(() => {
+      longPressFired = true;
+      pressInfo = null;
+      reset();
+    }, LONG_PRESS);
+  });
+  world.addEventListener("pointermove", (e) => {
+    if (!pressInfo) return;
+    if (Math.hypot(e.clientX - pressInfo.x, e.clientY - pressInfo.y) > TAP_MOVE) {
+      if (longPressTimer) clearTimeout(longPressTimer);
+      pressInfo = null;
+    }
+  });
+  world.addEventListener("pointerup", (e) => {
+    if (longPressTimer) clearTimeout(longPressTimer);
+    if (!pressInfo || longPressFired) { pressInfo = null; return; }
+    const dt = Date.now() - pressInfo.t;
+    const moved = Math.hypot(e.clientX - pressInfo.x, e.clientY - pressInfo.y);
+    if (dt < TAP_TIME && moved < TAP_MOVE) showTapInfo();
+    pressInfo = null;
+  });
+  world.addEventListener("pointercancel", () => {
+    if (longPressTimer) clearTimeout(longPressTimer);
+    pressInfo = null;
   });
 
   // resize
