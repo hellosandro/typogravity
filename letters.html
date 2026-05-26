@@ -150,6 +150,61 @@
     return parts;
   }
 
+  // Campiona il glifo per J/P: ricava asta (larghezza/posizione reali) e ingombro
+  // dell'inchiostro, così i due solidi coprono davvero la lettera. Ritorna parti in design-coord.
+  function sampleJP(ch, fontSize, opts) {
+    const size = Math.ceil(fontSize * 1.9);
+    const Cx = Math.round(size / 2), Cy = Math.round(size / 2);
+    const glyphRelY = fontSize * GLYPH_OFFSET_Y - POLY_OFFSET_Y;
+    const off = document.createElement("canvas");
+    off.width = size; off.height = size;
+    const o = off.getContext("2d");
+    o.fillStyle = "#fff";
+    o.textAlign = "center";
+    o.textBaseline = "middle";
+    o.font = `700 ${fontSize}px "Geist", sans-serif`;
+    o.fillText(ch, Cx, Cy + glyphRelY);
+    const data = o.getImageData(0, 0, size, size).data;
+    const A = (x, y) => (x < 0 || y < 0 || x >= size || y >= size) ? 0 : data[(y * size + x) * 4 + 3];
+
+    let iT = -1, iB = -1, iL = size, iR = -1;
+    for (let y = 0; y < size; y++) {
+      let rowHas = false;
+      for (let x = 0; x < size; x++) { if (A(x, y) > 40) { rowHas = true; if (x < iL) iL = x; if (x > iR) iR = x; } }
+      if (rowHas) { if (iT < 0) iT = y; iB = y; }
+    }
+    if (iT < 0) return null;
+    const Hk = iB - iT;
+    const leftmost = y => { for (let x = 0; x < size; x++) if (A(x, y) > 40) return x; return -1; };
+    const rightmost = y => { for (let x = size - 1; x >= 0; x--) if (A(x, y) > 40) return x; return -1; };
+    const rect = (x0, x1, y0, y1, radius) => Bodies.rectangle(
+      (x0 + x1) / 2 - Cx, (y0 + y1) / 2 - Cy, (x1 - x0), (y1 - y0),
+      radius ? Object.assign({}, opts, { chamfer: { radius } }) : opts
+    );
+
+    if (ch === "J") {
+      const yTop = Math.round(iT + 0.12 * Hk);
+      const sx0 = leftmost(yTop), sx1 = rightmost(yTop);     // in alto: solo l'asta
+      const botH = Math.round(0.28 * Hk);
+      const r = Math.min(botH, (iR - iL) / 2) * 0.9;
+      return [
+        rect(sx0, sx1, iT, iB - Math.round(botH * 0.4)),     // asta (scende dentro al fondo)
+        rect(iL, iR, iB - botH, iB, [0, 0, r, r]),            // fondo, angoli bassi tondi
+      ];
+    }
+    if (ch === "P") {
+      const yBot = Math.round(iB - 0.12 * Hk);
+      const sx0 = leftmost(yBot), sx1 = rightmost(yBot);     // in basso: solo l'asta
+      const bowlH = Math.round(0.62 * Hk);
+      const r = bowlH / 2 * 0.9;
+      return [
+        rect(sx0, sx1, iT, iB),                              // asta piena altezza
+        rect(iL, iR, iT, iT + bowlH, [0, r, r, 0]),          // occhiello, angoli destri tondi
+      ];
+    }
+    return null;
+  }
+
   function letterParts(char, w, h, fontSize, opts) {
     const ST = fontSize * 0.16;
     const BT = ST * BAR_COMPENSATION;
@@ -165,18 +220,21 @@
       return [ mk(-w/4, 0, legLen, ST, -legAng), mk(w/4, 0, legLen, ST, legAng), mk(0, yc, t * w, BT) ];
     }
     if (char === "P") {
-      // occhiello (box con angoli destri tondi) + asta verticale sinistra
+      const s = sampleJP("P", fontSize, opts);
+      if (s) return s;
+      // fallback a proporzioni se il campionamento fallisce
       const bowlH = h * 0.62;
-      const r = bowlH / 2 * 0.9;          // raggio proporzionale all'altezza dell'occhiello
+      const r = bowlH / 2 * 0.9;
       return [
         Bodies.rectangle(-w/2 + ST/2, 0, ST, h, opts),
         Bodies.rectangle(0, -h/2 + bowlH/2, w, bowlH, Object.assign({}, opts, { chamfer: { radius: [0, r, r, 0] } })),
       ];
     }
     if (char === "J") {
-      // fondo (box con angoli bassi tondi) + asta verticale destra
+      const s = sampleJP("J", fontSize, opts);
+      if (s) return s;
       const botH = h * 0.28;
-      const r = Math.min(botH, w/2) * 0.9;   // raggio maggiore
+      const r = Math.min(botH, w/2) * 0.9;
       return [
         Bodies.rectangle(w/2 - ST/2, -botH/4, ST, h - botH/2, opts),
         Bodies.rectangle(0, h/2 - botH/2, w, botH, Object.assign({}, opts, { chamfer: { radius: [0, 0, r, r] } })),
