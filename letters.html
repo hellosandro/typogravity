@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tipogravity — letters & collision polygons</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.19.0/matter.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0a0a;
+    font-family: 'Geist', sans-serif;
+    padding: 24px;
+    min-height: 100vh;
+  }
+  h1 {
+    color: #ffffff;
+    font-size: 12px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    opacity: 0.5;
+    font-weight: 500;
+    margin-bottom: 18px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 4px;
+    justify-items: center;
+  }
+  .cell { display: flex; flex-direction: column; align-items: center; }
+  canvas { display: block; }
+  .label {
+    color: #ffffff;
+    opacity: 0.4;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    margin-top: -10px;
+  }
+</style>
+</head>
+<body>
+<h1>Letters &amp; collision polygons · font size 180</h1>
+<div class="grid" id="grid"></div>
+
+<script>
+  const { Bodies, Body } = Matter;
+
+  // ── logica forma (mirror di index.html) ──────────────────────────────
+  const HITBOX_W = 0.82;
+  const HITBOX_H = 0.72;
+  const GLYPH_OFFSET_Y = 0.06;
+  const POLY_OFFSET_Y = 10;
+  const CHAMFER_ROUND = 0.9;
+  const ROUND_OVERRIDE = { O: 0.98, D: 0.98, C: 0.98, S: 0.98 };
+  const WIDTH_BONUS = { O: 4 };
+  const BAR_COMPENSATION = 0.94;
+  const CORNER_MAP = {
+    O: [1,1,1,1], Q: [1,1,1,1], S: [1,1,1,1], C: [1,1,1,1], G: [1,1,1,1],
+    U: [0,0,1,1],
+    D: [0,1,1,0], B: [0,1,1,0],
+    P: [0,1,0,0], R: [0,1,0,0],
+    J: [0,0,0,1],
+  };
+  function letterChamfer(char, w, h) {
+    const c = CORNER_MAP[char];
+    if (!c) return undefined;
+    const r = Math.min(w, h) / 2 * (ROUND_OVERRIDE[char] || CHAMFER_ROUND);
+    return { radius: [c[0]*r, c[1]*r, c[2]*r, c[3]*r] };
+  }
+  function letterParts(char, w, h, fontSize, opts) {
+    const ST = fontSize * 0.16;
+    const BT = ST * BAR_COMPENSATION;
+    const mk = (cx, cy, pw, ph) => Bodies.rectangle(cx, cy, pw, ph, opts);
+    if (char === "T") return [ mk(0, -h/2 + BT/2, w, BT), mk(0, 0, ST, h) ];
+    if (char === "H") return [ mk(-w/2 + ST/2, 0, ST, h), mk(w/2 - ST/2, 0, ST, h), mk(0, 0, w, BT) ];
+    if (char === "F") return [ mk(-w/2 + ST/2, 0, ST, h), mk(0, -h/2 + BT/2, w, BT), mk(0, 0, w, BT) ];
+    if (char === "E") return [ mk(-w/2 + ST/2, 0, ST, h), mk(0, -h/2 + BT/2, w, BT), mk(0, 0, w, BT), mk(0, h/2 - BT/2, w, BT) ];
+    if (char === "L") return [ mk(-w/2 + ST/2, 0, ST, h), mk(0, h/2 - BT/2, w, BT) ];
+    if (char === "I") return [ mk(0, 0, ST, h) ];
+    return null;
+  }
+  const COLORS = ["#E8A4B8","#3E8D5E","#1E3F8A","#D85E3C","#C93B2B","#E8B93C","#A36B4A","#2B6B9E"];
+
+  // ── costruzione corpo (mirror di placeStaticLetter) ──────────────────
+  function buildBody(ch, fontSize, letterW, cx, cy) {
+    const collisionW = letterW * HITBOX_W + (WIDTH_BONUS[ch] || 0);
+    const collisionH = fontSize * HITBOX_H;
+    const partOpts = { render: { visible: false } };
+    const parts = letterParts(ch, collisionW, collisionH, fontSize, partOpts);
+    let body, bcx = 0, bcy = 0;
+    if (parts) {
+      body = Body.create({ parts: parts });
+      bcx = -body.position.x;
+      bcy = -body.position.y;
+      Body.translate(body, { x: cx, y: cy });
+    } else {
+      body = Bodies.rectangle(cx, cy, collisionW, collisionH, {
+        chamfer: letterChamfer(ch, collisionW, collisionH)
+      });
+    }
+    body.letterChar = ch;
+    body.fontSize = fontSize;
+    body.bcx = bcx;
+    body.bcy = bcy;
+    return body;
+  }
+
+  function draw(ctx, body, color) {
+    // glifo
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.translate(body.position.x, body.position.y);
+    ctx.fillStyle = color;
+    ctx.font = `700 ${body.fontSize}px "Geist", sans-serif`;
+    ctx.fillText(body.letterChar, body.bcx || 0, (body.bcy || 0) + body.fontSize * GLYPH_OFFSET_Y - POLY_OFFSET_Y);
+    ctx.restore();
+    // poligono di collisione (ogni parte per i corpi composti)
+    ctx.save();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(255,255,255,0.85)";
+    const segs = (body.parts && body.parts.length > 1) ? body.parts.slice(1) : [body];
+    segs.forEach(part => {
+      const v = part.vertices;
+      if (!v || v.length === 0) return;
+      ctx.beginPath();
+      ctx.moveTo(v[0].x, v[0].y);
+      for (let i = 1; i < v.length; i++) ctx.lineTo(v[i].x, v[i].y);
+      ctx.closePath();
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  const FONT_SIZE = 180;                 // stessa dimensione base dell'app
+  const LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+  const CELL = 240;                      // lato cella in px
+
+  document.fonts.ready.then(() => {
+    const grid = document.getElementById("grid");
+    const dpr = window.devicePixelRatio || 1;
+    LETTERS.forEach((ch, i) => {
+      const cell = document.createElement("div");
+      cell.className = "cell";
+
+      const cv = document.createElement("canvas");
+      cv.width = CELL * dpr;
+      cv.height = CELL * dpr;
+      cv.style.width = CELL + "px";
+      cv.style.height = CELL + "px";
+      const ctx = cv.getContext("2d");
+      ctx.scale(dpr, dpr);
+      ctx.font = `700 ${FONT_SIZE}px "Geist", sans-serif`;
+
+      const letterW = ctx.measureText(ch).width;
+      const body = buildBody(ch, FONT_SIZE, letterW, CELL / 2, CELL / 2);
+      draw(ctx, body, COLORS[i % COLORS.length]);
+
+      const label = document.createElement("div");
+      label.className = "label";
+      label.textContent = ch;
+
+      cell.appendChild(cv);
+      cell.appendChild(label);
+      grid.appendChild(cell);
+    });
+  });
+</script>
+</body>
+</html>
