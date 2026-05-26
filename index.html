@@ -223,17 +223,18 @@
   /* TESTO SPIEGAZIONE AL TAP — centrato verticalmente, allineato a sinistra */
   .tap-info {
     position: fixed;
-    left: 0;
-    right: 0;
-    top: 50%;
-    transform: translateY(-50%);
+    inset: 0;
     z-index: 20;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     padding: 0 6vw;
     text-align: left;
+    background: rgba(10, 10, 10, 0.85);
     color: #ffffff;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.4s ease;
+    transition: opacity 0.8s ease;
   }
   .tap-info.show { opacity: 1; }
   .tap-info .tap-word {
@@ -915,7 +916,7 @@
     tapHideTimer = setTimeout(() => {
       tapInfo.classList.remove("show");
       tapInfo.setAttribute("aria-hidden", "true");
-    }, 5000);
+    }, 8000);
   }
 
   // gesti sul canvas: tap = mostra spiegazione, long-press = nuova parola.
